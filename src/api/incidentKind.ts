@@ -21,6 +21,17 @@ export function fromApiKind(kind: unknown): IncidentKind | null {
     }
 }
 
+function nonEmptyString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value : null;
+}
+
 export function fromApiIncident<T extends IncidentSummary>(incident: ApiIncident<T>): T {
-    return { ...incident, kind: fromApiKind(incident.kind) } as T;
+    const metadata = 'metadata' in incident ? incident.metadata : undefined;
+    const metadataSiteName = metadata !== null && typeof metadata === 'object'
+        && !Array.isArray(metadata) && 'siteName' in metadata ? metadata.siteName : undefined;
+    return {
+        ...incident,
+        kind: fromApiKind(incident.kind),
+        siteName: nonEmptyString(incident.siteName) ?? nonEmptyString(metadataSiteName),
+    } as T;
 }
