@@ -25,7 +25,7 @@ export interface IncidentSummary {
     source: string;
     status: IncidentStatus;
     severity: IncidentSeverity;
-    kind: IncidentKind;
+    kind: IncidentKind | null;
     eventTime: string;
     createdAt: string;
     updatedAt: string;

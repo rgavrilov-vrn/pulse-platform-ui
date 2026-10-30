@@ -2,7 +2,7 @@ import type { IncidentKind, IncidentSummary } from './types';
 
 export type ApiIncidentKind = 'EVENT' | 'VIOLATION';
 export type ApiIncident<T extends IncidentSummary> = Omit<T, 'kind'> & {
-    kind: ApiIncidentKind | IncidentKind;
+    kind?: ApiIncidentKind | IncidentKind | null;
 };
 
 export function toApiKind(kind: IncidentKind | ApiIncidentKind): ApiIncidentKind {
@@ -13,11 +13,11 @@ export function toApiKind(kind: IncidentKind | ApiIncidentKind): ApiIncidentKind
     }
 }
 
-export function fromApiKind(kind: ApiIncidentKind | IncidentKind): IncidentKind {
+export function fromApiKind(kind: unknown): IncidentKind | null {
     switch (kind) {
         case 'EVENT': case 'notice': return 'notice';
         case 'VIOLATION': case 'incident': return 'incident';
-        default: throw new Error(`Unsupported incident kind in API response: ${String(kind)}`);
+        default: return null;
     }
 }
 

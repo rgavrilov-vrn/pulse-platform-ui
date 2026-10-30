@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { Catalog } from '../api/types';
+import type { Catalog, IncidentKind } from '../api/types';
 import { fromDateTimeLocal, toDateTimeLocal } from '../utils/format';
 
 const schema = z.object({
@@ -11,11 +11,11 @@ const schema = z.object({
     comment: z.string().min(1, 'Комментарий обязателен').max(10_000),
     checkpoint: z.string().optional(),
 });
-type Values = z.infer<typeof schema>;
+export type EventFormValues = z.infer<typeof schema>;
 
 interface Props {
     initial: {
-        kind: 'notice' | 'incident';
+        kind: IncidentKind | null;
         siteName: string;
         eventTime: string;
         comment: string;
@@ -24,119 +24,62 @@ interface Props {
     catalog: Catalog | undefined;
     disabled: boolean;
     saving: boolean;
-    onSave: (v: Values & { eventTime: string }) => void;
+    onSave: (v: EventFormValues) => void;
 }
 
 export function EventForm({ initial, catalog, disabled, saving, onSave }: Props) {
-    const {
-        register,
-        handleSubmit,
-        watch,
-        setValue,
-        formState: { errors, isDirty },
-    } = useForm<Values>({
+    const { register, handleSubmit, watch, setValue, formState: { errors, isDirty } } = useForm<EventFormValues>({
         resolver: zodResolver(schema),
         defaultValues: {
-            kind: initial.kind,
+            kind: initial.kind ?? undefined,
             siteName: initial.siteName,
             eventTime: toDateTimeLocal(initial.eventTime),
             comment: initial.comment,
             checkpoint: initial.checkpoint,
         },
     });
-
     const kind = watch('kind');
-
     return (
-        <form
-            id="event-form"
-            className="card-scroll"
-            onSubmit={handleSubmit((v) =>
-                onSave({ ...v, eventTime: fromDateTimeLocal(v.eventTime) }),
-            )}
-        >
-            <fieldset className="kind-field" disabled={disabled}>
+        <form id="event-form" className="card-scroll"
+            onSubmit={handleSubmit((v) => onSave({ ...v, eventTime: fromDateTimeLocal(v.eventTime) }))}>
+            <fieldset className="kind-field" disabled={disabled || saving}>
                 <legend>Тип события</legend>
                 <div className="kind-switch">
-                    <button
-                        type="button"
-                        className={kind === 'notice' ? 'active' : ''}
-                        onClick={() => setValue('kind', 'notice', { shouldDirty: true })}
-                    >
-                        ℹ Уведомление
-                    </button>
-                    <button
-                        type="button"
-                        className={kind === 'incident' ? 'active' : ''}
-                        onClick={() => setValue('kind', 'incident', { shouldDirty: true })}
-                    >
-                        ▲ Инцидент
-                    </button>
+                    <button type="button" className={kind === 'notice' ? 'active' : ''} aria-pressed={kind === 'notice'}
+                        onClick={() => setValue('kind', 'notice', { shouldDirty: true, shouldValidate: true })}>ℹ Уведомление</button>
+                    <button type="button" className={kind === 'incident' ? 'active' : ''} aria-pressed={kind === 'incident'}
+                        onClick={() => setValue('kind', 'incident', { shouldDirty: true, shouldValidate: true })}>▲ Инцидент</button>
                 </div>
+                {!kind && <small style={{ display: 'block', marginTop: 8, color: 'var(--muted)' }}>
+                    Тип не указан{disabled ? '.' : '. Выберите тип перед сохранением.'}
+                </small>}
+                {errors.kind && <small className="invalid-feedback d-block" role="alert">Выберите тип события.</small>}
             </fieldset>
-
             <div className="field-block">
-                <label>Площадка</label>
-                <input
-                    className="form-control"
-                    list="sites"
-                    disabled={disabled}
-                    {...register('siteName')}
-                />
-                <datalist id="sites">
-                    {catalog?.facilities.map((f) => (
-                        <option key={f.id} value={f.name} />
-                    ))}
-                </datalist>
-                {errors.siteName && (
-                    <small className="invalid-feedback d-block">{errors.siteName.message}</small>
-                )}
+                <label htmlFor="event-site">Площадка</label>
+                <input id="event-site" className="form-control" list="sites" disabled={disabled || saving} {...register('siteName')} />
+                <datalist id="sites">{catalog?.facilities.map((f) => <option key={f.id} value={f.name} />)}</datalist>
+                {errors.siteName && <small className="invalid-feedback d-block">{errors.siteName.message}</small>}
             </div>
-
             <div className="time-fields">
                 <div className="field-block">
-                    <label>Время события</label>
-                    <input
-                        type="datetime-local"
-                        className="form-control"
-                        disabled={disabled}
-                        {...register('eventTime')}
-                    />
-                    {errors.eventTime && (
-                        <small className="invalid-feedback d-block">{errors.eventTime.message}</small>
-                    )}
+                    <label htmlFor="event-time">Время события</label>
+                    <input id="event-time" type="datetime-local" className="form-control" disabled={disabled || saving} {...register('eventTime')} />
+                    {errors.eventTime && <small className="invalid-feedback d-block">{errors.eventTime.message}</small>}
                 </div>
-                <div className="field-block">
-                    <label>Зарегистрировано</label>
-                    <div className="readonly-value">{initial.eventTime}</div>
-                </div>
+                <div className="field-block"><label>Зарегистрировано</label><div className="readonly-value">{initial.eventTime}</div></div>
             </div>
-
             <div className="field-block">
-                <label>Контрольная точка</label>
-                <input
-                    className="form-control"
-                    disabled={disabled}
-                    placeholder="Например, перегрузочная рампа"
-                    {...register('checkpoint')}
-                />
+                <label htmlFor="event-checkpoint">Контрольная точка</label>
+                <input id="event-checkpoint" className="form-control" disabled={disabled || saving}
+                    placeholder="Например, перегрузочная рампа" {...register('checkpoint')} />
             </div>
-
             <div className="field-block comment-block">
-                <label>Комментарий</label>
-                <textarea
-                    className="form-control"
-                    rows={4}
-                    disabled={disabled}
-                    placeholder="Опишите, что наблюдается на видео…"
-                    {...register('comment')}
-                />
-                {errors.comment && (
-                    <small className="invalid-feedback d-block">{errors.comment.message}</small>
-                )}
+                <label htmlFor="event-comment">Комментарий</label>
+                <textarea id="event-comment" className="form-control" rows={4} disabled={disabled || saving}
+                    placeholder="Опишите, что наблюдается на видео…" {...register('comment')} />
+                {errors.comment && <small className="invalid-feedback d-block">{errors.comment.message}</small>}
             </div>
-
-            {/* Скрытый submit для кнопки "Сохранить" извне формы */}
             <button type="submit" hidden disabled={disabled || !isDirty || saving} />
         </form>
     );
