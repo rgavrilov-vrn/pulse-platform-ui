@@ -6,6 +6,7 @@ import { incidentsApi } from '../api/incidents';
 import { useCancelIncident, useDeferIncident, usePublishIncident, useIncident } from '../hooks/useIncidents';
 import { StatusBadge } from './StatusBadge';
 import { EventForm, type EventFormValues } from './EventForm';
+import { savedCategoryNames } from './EventTypeSelector';
 import { ActionDialog } from './ActionDialog';
 
 interface Props { incident: IncidentSummary; catalog: Catalog | undefined }
@@ -18,22 +19,18 @@ export function EventCard({ incident, catalog }: Props) {
     const [dialog, setDialog] = useState<null | 'defer' | 'cancel'>(null);
     const [saving, setSaving] = useState(false);
     const current = details.data ?? incident;
+    const categoryNames = savedCategoryNames(current, catalog);
     const isDraft = current.status === 'DRAFT';
     const ready = !!details.data && !details.isError;
     const metadataCheckpoint = details.data?.metadata?.checkpoint;
     const checkpoint = typeof details.data?.checkpoint === 'string' ? details.data.checkpoint
         : typeof metadataCheckpoint === 'string' ? metadataCheckpoint : '';
-    const initial = {
-        kind: current.kind, siteName: current.siteName ?? '', eventTime: current.eventTime,
-        comment: current.comment ?? '', checkpoint,
-    };
+    const initial = { kind: current.kind, siteName: current.siteName ?? '', eventTime: current.eventTime, comment: current.comment ?? '', checkpoint };
     const onSave = async (values: EventFormValues) => {
         if (!ready) return;
         setSaving(true);
         try {
-            await incidentsApi.update(incident.id, {
-                kind: values.kind, eventTime: values.eventTime, comment: values.comment, checkpoint: values.checkpoint,
-            });
+            await incidentsApi.update(incident.id, { kind: values.kind, eventTime: values.eventTime, comment: values.comment, checkpoint: values.checkpoint });
             void qc.invalidateQueries({ queryKey: ['incidents'] });
             void qc.invalidateQueries({ queryKey: ['incident', incident.id] });
             toast.success('Изменения сохранены');
@@ -42,11 +39,11 @@ export function EventCard({ incident, catalog }: Props) {
     };
     return <aside className="event-card panel" aria-label="Карточка события">
         <div className="card-heading"><div><div className="card-overline"><span>СОБЫТИЕ № {current.number}</span>
-            <StatusBadge status={current.status} deferred={!!current.deferredUntil} /></div><h2>{current.categoryName ?? 'Без категории'}</h2></div></div>
+            <StatusBadge status={current.status} deferred={!!current.deferredUntil} /></div><h2>{categoryNames.join(' · ') || 'Без категории'}</h2></div></div>
         {details.isError ? <div className="card-scroll"><p role="alert">Не удалось загрузить подробности события. Сохранение недоступно, чтобы не затереть данные.</p>
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
-            : <EventForm key={incident.id} initial={initial} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={saving} />}
+            : <EventForm key={incident.id} initial={initial} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={saving} />}
         <div className="card-actions"><div className="primary-actions">
             <button className="btn btn-primary" disabled={!ready || !isDraft || !current.kind || saving || publish.isPending}
                 title={!current.kind ? 'Сначала выберите тип события и сохраните изменения' : undefined} onClick={() => publish.mutate(incident.id)}>

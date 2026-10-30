@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Catalog, IncidentKind } from '../api/types';
 import { fromDateTimeLocal, toDateTimeLocal } from '../utils/format';
 import { CheckpointSelect, isCheckpoint } from './CheckpointSelect';
+import { EventTypeSelector } from './EventTypeSelector';
 
 const schema = z.object({
     kind: z.enum(['notice', 'incident']),
@@ -15,12 +16,13 @@ const schema = z.object({
 export type EventFormValues = z.infer<typeof schema>;
 interface Props {
     initial: { kind: IncidentKind | null; siteName: string; eventTime: string; comment: string; checkpoint: string };
+    categoryNames?: string[];
     catalog: Catalog | undefined;
     disabled: boolean;
     saving: boolean;
     onSave: (v: EventFormValues) => void;
 }
-export function EventForm({ initial, catalog, disabled, saving, onSave }: Props) {
+export function EventForm({ initial, categoryNames = [], catalog, disabled, saving, onSave }: Props) {
     const { register, handleSubmit, watch, setValue, formState: { errors, isDirty } } = useForm<EventFormValues>({
         resolver: zodResolver(schema),
         defaultValues: {
@@ -32,14 +34,16 @@ export function EventForm({ initial, catalog, disabled, saving, onSave }: Props)
     const checkpoint = watch('checkpoint') ?? '';
     const facilities = Array.isArray(catalog?.facilities) ? catalog.facilities : [];
     return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((v) => onSave({ ...v, eventTime: fromDateTimeLocal(v.eventTime) }))}>
-        <fieldset className="kind-field" disabled={disabled || saving}>
-            <legend>Тип события</legend><div className="kind-switch">
-                <button type="button" className={kind === 'notice' ? 'active' : ''} aria-pressed={kind === 'notice'} onClick={() => setValue('kind', 'notice', { shouldDirty: true, shouldValidate: true })}>ℹ Уведомление</button>
-                <button type="button" className={kind === 'incident' ? 'active' : ''} aria-pressed={kind === 'incident'} onClick={() => setValue('kind', 'incident', { shouldDirty: true, shouldValidate: true })}>▲ Инцидент</button>
+        <EventTypeSelector groups={catalog?.groups} value={kind} disabled={disabled || saving}
+            error={errors.kind ? 'Выберите тип события из справочника.' : undefined}
+            onChange={(value) => setValue('kind', value, { shouldDirty: true, shouldValidate: true })} />
+        <div className="field-block">
+            <span id="event-category-label" style={{ display: 'block', fontSize: 10, fontWeight: 600, marginBottom: 8 }}>Категория</span>
+            <div className="readonly-value" aria-labelledby="event-category-label" style={{ height: 'auto', minHeight: 36 }}>
+                {categoryNames.length ? categoryNames.join(' · ') : 'Не указана'}
             </div>
-            {!kind && <small style={{ display: 'block', marginTop: 8, color: 'var(--muted)' }}>Тип не указан{disabled ? '.' : '. Выберите тип перед сохранением.'}</small>}
-            {errors.kind && <small className="invalid-feedback d-block" role="alert">Выберите тип события.</small>}
-        </fieldset>
+            <small style={{ color: 'var(--muted)', fontSize: 10 }}>Сохранённые категории. Категория связана с контрольными точками события.</small>
+        </div>
         <div className="field-block"><label htmlFor="event-site">Площадка</label>
             <input id="event-site" className="form-control" list="sites" disabled={disabled || saving} {...register('siteName')} />
             <datalist id="sites">{facilities.map((f) => <option key={f.id} value={f.name} />)}</datalist>
