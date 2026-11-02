@@ -51,18 +51,19 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
         event.preventDefault();
         if (pending) return;
         if (!kind || !group) { setError('Выберите тип события из справочника.'); return; }
+        if (!categoryId) { setError('Выберите категорию события.'); return; }
         if (!site.trim() || !comment.trim()) { setError('Укажите площадку и комментарий.'); return; }
         if (!facilities.some((item) => item.name === site)) { setError('Выберите площадку из справочника.'); return; }
         const eventTime = fromZonedTime(time, 'Europe/Moscow');
         if (Number.isNaN(eventTime.getTime())) { setError('Укажите корректное время события.'); return; }
         const category = availableCategories.find((item) => item.id === categoryId);
-        if (categoryId && !category) { setError('Категория не принадлежит выбранному типу. Выберите категорию заново.'); return; }
+        if (!category) { setError('Категория не принадлежит выбранному типу. Выберите категорию заново.'); return; }
         if (checklistItemId && !selectedItem) { setError('Контрольная точка не принадлежит выбранной категории. Выберите её заново.'); return; }
         setError('');
         try {
-            const created = await mutation.mutateAsync({ source: 'manual', creationMode: 'MANUAL', eventTime: eventTime.toISOString(), severity, comment: comment.trim(),
-                metadata: { kind, siteName: site.trim(), checkpoint: selectedItem?.code ?? '', checklistItemId: selectedItem?.id, checklistItemName: selectedItem?.name,
-                    directionId: group.id, directionName: group.name, categoryId: category?.id, categoryName: category?.name } });
+            const created = await mutation.mutateAsync({ source: 'manual', creationMode: 'MANUAL', categoryId: category.id, eventTime: eventTime.toISOString(), severity, comment: comment.trim(),
+                metadata: { siteName: site.trim(), checkpoint: selectedItem?.code ?? '', checklistItemId: selectedItem?.id, checklistItemName: selectedItem?.name,
+                    directionId: group.id, directionName: group.name, categoryName: category.name } });
             void qc.invalidateQueries({ queryKey: ['incidents'] });
             toast.success('Событие создано'); onCreated(created);
         } catch (cause: unknown) {
