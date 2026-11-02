@@ -14,7 +14,7 @@ import type { IncidentStatus, IncidentSummary } from '../api/types';
 function statusesFor(filter: Filter): IncidentStatus[] | undefined {
     switch (filter) {
         case 'draft': return ['DRAFT'];
-        case 'published': return ['RECORDED', 'CONFIRMED', 'CLOSED', 'ARCHIVED'];
+        case 'published': return ['RECORDED'];
         case 'cancelled': return ['CANCELLED'];
         default: return undefined;
     }
