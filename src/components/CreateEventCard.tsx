@@ -41,7 +41,7 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
         window.addEventListener('beforeunload', warn);
         return () => window.removeEventListener('beforeunload', warn);
     }, [dirty, pending]);
-    function cancel() { if (!pending && (!dirty || window.confirm('Закрыть форму? Несохранённые данные будут потеряны.'))) onCancelCancel(); }
+    function cancel() { if (!pending && (!dirty || window.confirm('Закрыть форму? Несохранённые данные будут потеряны.'))) onCancel(); }
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (pending) return;
