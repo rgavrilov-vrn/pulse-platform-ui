@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { Catalog, IncidentKind } from '../api/types';
 import { fromDateTimeLocal, toDateTimeLocal } from '../utils/format';
-import { CheckpointSelect, isCheckpoint } from './CheckpointSelect';
+import { CheckpointSelect } from './CheckpointSelect';
 import { EventTypeSelector } from './EventTypeSelector';
 
 const schema = z.object({
@@ -11,7 +11,7 @@ const schema = z.object({
     siteName: z.string().min(1, 'Укажите площадку'),
     eventTime: z.string().min(1, 'Укажите время'),
     comment: z.string().min(1, 'Комментарий обязателен').max(10_000),
-    checkpoint: z.string().refine(isCheckpoint, 'Выберите контрольную точку из списка').optional(),
+    checkpoint: z.string().optional(),
 });
 export type EventFormValues = z.infer<typeof schema>;
 interface Props {
@@ -33,7 +33,15 @@ export function EventForm({ initial, categoryNames = [], catalog, disabled, savi
     const kind = watch('kind');
     const checkpoint = watch('checkpoint') ?? '';
     const facilities = Array.isArray(catalog?.facilities) ? catalog.facilities : [];
-    return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((v) => onSave({ ...v, eventTime: fromDateTimeLocal(v.eventTime) }))}>
+    const checklistItems = Array.isArray(catalog?.checklistItems) ? catalog.checklistItems : [];
+    const checkpointCodes = new Set(checklistItems.map((item) => item.code));
+    return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((v) => {
+        if (v.checkpoint && !checkpointCodes.has(v.checkpoint)) {
+            setValue('checkpoint', v.checkpoint, { shouldValidate: true });
+            return;
+        }
+        onSave({ ...v, eventTime: fromDateTimeLocal(v.eventTime) });
+    })}>
         <EventTypeSelector groups={catalog?.groups} value={kind} disabled={disabled || saving}
             error={errors.kind ? 'Выберите тип события из справочника.' : undefined}
             onChange={(value) => setValue('kind', value, { shouldDirty: true, shouldValidate: true })} />
@@ -54,7 +62,7 @@ export function EventForm({ initial, categoryNames = [], catalog, disabled, savi
             {errors.eventTime && <small className="invalid-feedback d-block">{errors.eventTime.message}</small>}
         </div><div className="field-block"><label>Зарегистрировано</label><div className="readonly-value">{initial.eventTime}</div></div></div>
         <div className="field-block"><label htmlFor="event-checkpoint">Контрольная точка</label>
-            <CheckpointSelect id="event-checkpoint" className="form-control" disabled={disabled || saving} {...register('checkpoint')}
+            <CheckpointSelect id="event-checkpoint" className="form-control" items={checklistItems} disabled={disabled || saving} {...register('checkpoint')}
                 value={checkpoint} aria-invalid={!!errors.checkpoint} aria-describedby={errors.checkpoint ? 'event-checkpoint-error' : undefined} />
             {errors.checkpoint && <small id="event-checkpoint-error" className="invalid-feedback d-block" role="alert">{errors.checkpoint.message}</small>}
         </div>
