@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { materialsApi, type IncidentMaterial } from '../api/materials';
+import { MaterialPreview } from './MaterialPreview';
 import './IncidentMaterials.css';
 
 type Job = { id: string; file: File; state: 'queued' | 'uploading' | 'done' | 'failed'; progress: number; error?: string };
@@ -27,6 +28,8 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
     const input = useRef<HTMLInputElement>(null);
     const controller = useRef<AbortController | null>(null);
     const running = useRef(false);
+    const dragDepth = useRef(0);
+    const [dragging, setDragging] = useState(false);
     const [jobs, setJobs] = useState<Job[]>([]);
     const [busy, setBusy] = useState(false);
     const [downloading, setDownloading] = useState<string | null>(null);
@@ -76,6 +79,12 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
             if (!abort.signal.aborted) { setBusy(false); onUploadingChange(false); }
         }
     }
+    function addFiles(files: File[]) {
+        if (!files.length || !canUpload || running.current) return;
+        const batch: Job[] = files.map((file) => ({ id: crypto.randomUUID(), file, state: 'queued', progress: 0 }));
+        setJobs((current) => [...current, ...batch]);
+        void upload(batch);
+    }
     async function download(material: IncidentMaterial) {
         if (downloading) return;
         setDownloading(material.id);
@@ -83,28 +92,50 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
         catch (error) { toast.error(message(error)); }
         finally { setDownloading(null); }
     }
-    return <section className="incident-materials" aria-label="Материалы события">
+    return <section className="incident-materials" aria-label="Материалы события"
+        onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
+        onDrop={(event) => {
+            if (!event.dataTransfer.types.includes('Files')) return;
+            event.preventDefault(); dragDepth.current = 0; setDragging(false);
+            addFiles(Array.from(event.dataTransfer.files));
+        }}>
         <div className="incident-materials-heading">
             <h3>Материалы {query.data ? `(${query.data.length})` : ''}</h3>
             {canUpload && <button type="button" className="btn btn-outline-secondary" disabled={busy} onClick={() => input.current?.click()}>Прикрепить файлы</button>}
         </div>
         <input ref={input} type="file" hidden multiple disabled={!canUpload || busy}
             accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,.csv,.mp4,.webm,.docx,.xlsx" onChange={(event) => {
-                const batch: Job[] = Array.from(event.target.files ?? []).map((file) => ({
-                    id: crypto.randomUUID(), file, state: 'queued', progress: 0,
-                }));
+                addFiles(Array.from(event.target.files ?? []));
                 event.target.value = '';
-                if (!batch.length || !canUpload || running.current) return;
-                setJobs((current) => [...current, ...batch]);
-                void upload(batch);
             }} />
+        {canUpload && <div className={`material-dropzone${dragging && !busy ? ' is-dragging' : ''}`}
+            role="button" tabIndex={busy ? -1 : 0} aria-disabled={busy} aria-label="Перетащите файлы или выберите их на компьютере"
+            onClick={() => { if (!busy) input.current?.click(); }}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!busy) input.current?.click(); }
+            }}
+            onDragEnter={(event) => {
+                if (!event.dataTransfer.types.includes('Files')) return;
+                event.preventDefault(); dragDepth.current++; setDragging(true);
+            }}
+            onDragLeave={(event) => {
+                event.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1);
+                if (!dragDepth.current) setDragging(false);
+            }}
+            onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = busy ? 'none' : 'copy'; }}>
+            <span>{busy ? 'Идёт загрузка файлов…' : dragging ? 'Отпустите файлы для загрузки' : 'Перетащите файлы сюда'}</span>
+            <small>или нажмите, чтобы выбрать на компьютере</small>
+        </div>}
         {canUpload && <p className="subtle">Фото, видео и документы. Файлы сохраняются сразу, отдельно от кнопки «Сохранить». Размер ограничивается настройками сервера.</p>}
         {query.isPending && <p role="status" className="subtle">Загрузка материалов…</p>}
         {query.isError && <div role="alert"><p>{message(query.error)}</p>
             <button type="button" className="btn btn-outline-secondary" disabled={query.isFetching} onClick={() => void query.refetch()}>Повторить загрузку списка</button></div>}
         {query.isSuccess && !query.data.length && <p className="subtle">Прикреплённых файлов пока нет.</p>}
         {!!query.data?.length && <ul className="incident-material-list">{query.data.map((material) => <li key={material.id}>
-            <div className="incident-material-name"><span>{material.fileName}</span><small>{size(material.sizeBytes)}</small></div>
+            <div className="incident-material-name">
+                <MaterialPreview incidentId={incidentId} material={material} />
+                <small>{size(material.sizeBytes)}</small>
+            </div>
             <button type="button" className="btn btn-outline-secondary" disabled={!!downloading} onClick={() => void download(material)}
                 aria-label={`Скачать ${material.fileName}`}>{downloading === material.id ? 'Скачивание…' : 'Скачать'}</button>
         </li>)}</ul>}
