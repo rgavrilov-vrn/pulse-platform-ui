@@ -44,7 +44,9 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
     const initialItem = items.find((item) => item.code === initial.checkpoint);
     const savedCategory = availableCategories.find((item) => item.id === initialItem?.categoryId)
         ?? (categoryNames.length === 1 ? availableCategories.find((item) => item.name === categoryNames[0]) : undefined);
-    const defaultCategory = !initial.checkpoint && !categoryNames.length ? availableCategories.find((item) => item.name === 'Биобезопасность') : undefined;
+    const canUseDefault = kind !== initial.kind || (!initial.checkpoint && !categoryNames.length);
+    const defaultName = kind === 'notice' ? 'Общая' : 'Биобезопасность';
+    const defaultCategory = canUseDefault ? availableCategories.find((item) => item.name === defaultName) : undefined;
     const categoryId = categoryOverride ?? savedCategory?.id ?? defaultCategory?.id ?? '';
     const availableItems = categoryId ? items.filter((item) => item.categoryId === categoryId) : [];
     const locked = disabled || saving;

@@ -37,9 +37,10 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
     const pending = mutation.isPending;
     useEffect(() => {
         if (categoryId || !group) return;
-        const item = availableCategories.find((option) => option.name === 'Биобезопасность');
+        const defaultName = kind === 'notice' ? 'Общая' : 'Биобезопасность';
+        const item = availableCategories.find((option) => option.name === defaultName);
         if (item) setCategoryId(item.id);
-    }, [availableCategories, categoryId, group]);
+    }, [availableCategories, categoryId, group, kind]);
     useEffect(() => {
         const warn = (event: BeforeUnloadEvent) => { if (dirty || pending) { event.preventDefault(); event.returnValue = ''; } };
         window.addEventListener('beforeunload', warn);
