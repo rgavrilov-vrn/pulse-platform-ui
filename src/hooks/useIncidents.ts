@@ -37,10 +37,17 @@ export function useCancelIncident() {
     return useMutation({
         mutationFn: ({ id, reason }: { id: string; reason: string }) =>
             incidentsApi.changeStatus(id, 'CANCELLED', reason),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['incidents'] });
+        onSuccess: async (incident, { id }) => {
+            await qc.cancelQueries({ queryKey: ['incident', id], exact: true });
+            qc.setQueryData(['incident', id], incident);
             toast.success('Регистрация отменена');
+            await Promise.all([
+                qc.invalidateQueries({ queryKey: ['incidents'] }),
+                qc.invalidateQueries({ queryKey: ['incident', id], exact: true }),
+            ]);
         },
+        onError: (e: any) =>
+            toast.error(e.response?.data?.message ?? 'Не удалось отменить регистрацию'),
     });
 }
 
