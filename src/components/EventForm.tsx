@@ -1,75 +1,127 @@
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { Catalog, IncidentKind } from '../api/types';
-import { fromDateTimeLocal, toDateTimeLocal } from '../utils/format';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
+import type { Catalog, IncidentKind, IncidentSeverity } from '../api/types';
+import { fromApiKind } from '../api/incidentKind';
 import { CheckpointSelect } from './CheckpointSelect';
 import { EventTypeSelector } from './EventTypeSelector';
 
 const schema = z.object({
     kind: z.enum(['notice', 'incident']),
-    siteName: z.string().min(1, 'Укажите площадку'),
+    siteName: z.string(),
     eventTime: z.string().min(1, 'Укажите время'),
-    comment: z.string().min(1, 'Комментарий обязателен').max(10_000),
+    comment: z.string().trim().min(1, 'Комментарий обязателен').max(10_000),
     checkpoint: z.string().optional(),
 });
 export type EventFormValues = z.infer<typeof schema>;
 interface Props {
     initial: { kind: IncidentKind | null; siteName: string; eventTime: string; comment: string; checkpoint: string };
+    severity: IncidentSeverity;
+    createdAt: string;
     categoryNames?: string[];
     catalog: Catalog | undefined;
     disabled: boolean;
     saving: boolean;
     onSave: (v: EventFormValues) => void;
 }
-export function EventForm({ initial, categoryNames = [], catalog, disabled, saving, onSave }: Props) {
-    const { register, handleSubmit, watch, setValue, formState: { errors, isDirty } } = useForm<EventFormValues>({
+export function EventForm({ initial, severity, createdAt, categoryNames = [], catalog, disabled, saving, onSave }: Props) {
+    const [categoryOverride, setCategoryOverride] = useState<string | null>(null);
+    const { register, handleSubmit, watch, setValue, setError, clearErrors, formState: { errors, isDirty } } = useForm<EventFormValues>({
         resolver: zodResolver(schema),
         defaultValues: {
             kind: initial.kind ?? undefined, siteName: initial.siteName,
-            eventTime: toDateTimeLocal(initial.eventTime), comment: initial.comment, checkpoint: initial.checkpoint,
+            eventTime: formatInTimeZone(initial.eventTime, 'Europe/Moscow', "yyyy-MM-dd'T'HH:mm:ss"),
+            comment: initial.comment, checkpoint: initial.checkpoint,
         },
     });
     const kind = watch('kind');
     const checkpoint = watch('checkpoint') ?? '';
-    const facilities = Array.isArray(catalog?.facilities) ? catalog.facilities : [];
-    const checklistItems = Array.isArray(catalog?.checklistItems) ? catalog.checklistItems : [];
-    const checkpointCodes = new Set(checklistItems.map((item) => item.code));
-    return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((v) => {
-        if (v.checkpoint && !checkpointCodes.has(v.checkpoint)) {
-            setValue('checkpoint', v.checkpoint, { shouldValidate: true });
+    const comment = watch('comment') ?? '';
+    const groups = catalog?.groups ?? [];
+    const categories = catalog?.categories ?? [];
+    const items = catalog?.checklistItems ?? [];
+    const facilities = catalog?.facilities ?? [];
+    const group = groups.find((item) => fromApiKind(item.code) === kind);
+    const availableCategories = group ? categories.filter((item) => item.groupId === group.id) : [];
+    const initialItem = items.find((item) => item.code === initial.checkpoint);
+    const savedCategory = availableCategories.find((item) => item.id === initialItem?.categoryId)
+        ?? (categoryNames.length === 1 ? availableCategories.find((item) => item.name === categoryNames[0]) : undefined);
+    const categoryId = categoryOverride ?? savedCategory?.id ?? '';
+    const availableItems = categoryId ? items.filter((item) => item.categoryId === categoryId) : [];
+    const locked = disabled || saving;
+    return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((values) => {
+        if (locked) return;
+        if (values.checkpoint && values.checkpoint !== initial.checkpoint && !availableItems.some((item) => item.code === values.checkpoint)) {
+            setError('checkpoint', { type: 'validate', message: 'Выберите контрольную точку выбранной категории.' });
             return;
         }
-        onSave({ ...v, eventTime: fromDateTimeLocal(v.eventTime) });
+        const date = fromZonedTime(values.eventTime, 'Europe/Moscow');
+        if (Number.isNaN(date.getTime())) {
+            setError('eventTime', { type: 'validate', message: 'Укажите корректное время события.' });
+            return;
+        }
+        onSave({ ...values, eventTime: date.toISOString() });
     })}>
-        <EventTypeSelector groups={catalog?.groups} value={kind} disabled={disabled || saving}
+        <EventTypeSelector groups={groups} value={kind} disabled={locked}
             error={errors.kind ? 'Выберите тип события из справочника.' : undefined}
-            onChange={(value) => setValue('kind', value, { shouldDirty: true, shouldValidate: true })} />
-        <div className="field-block">
-            <span id="event-category-label" style={{ display: 'block', fontSize: 10, fontWeight: 600, marginBottom: 8 }}>Категория</span>
-            <div className="readonly-value" aria-labelledby="event-category-label" style={{ height: 'auto', minHeight: 36 }}>
-                {categoryNames.length ? categoryNames.join(' · ') : 'Не указана'}
+            onChange={(value) => {
+                if (value !== kind) {
+                    setCategoryOverride('');
+                    setValue('checkpoint', '', { shouldDirty: true });
+                    clearErrors('checkpoint');
+                }
+                setValue('kind', value, { shouldDirty: true, shouldValidate: true });
+            }} />
+        <fieldset disabled={locked}>
+            <div className="field-block"><label htmlFor="event-severity">Критичность</label>
+                <select id="event-severity" className="form-control" value={severity ?? ''} disabled aria-describedby="event-severity-note">
+                    <option value="">Не указана</option><option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option>
+                </select>
+                <small id="event-severity-note" className="subtle">Изменение критичности пока не поддерживается API.</small>
             </div>
-            <small style={{ color: 'var(--muted)', fontSize: 10 }}>Сохранённые категории. Категория связана с контрольными точками события.</small>
-        </div>
-        <div className="field-block"><label htmlFor="event-site">Площадка</label>
-            <input id="event-site" className="form-control" list="sites" disabled={disabled || saving} {...register('siteName')} />
-            <datalist id="sites">{facilities.map((f) => <option key={f.id} value={f.name} />)}</datalist>
-            {errors.siteName && <small className="invalid-feedback d-block">{errors.siteName.message}</small>}
-        </div>
-        <div className="time-fields"><div className="field-block"><label htmlFor="event-time">Время события</label>
-            <input id="event-time" type="datetime-local" className="form-control" disabled={disabled || saving} {...register('eventTime')} />
-            {errors.eventTime && <small className="invalid-feedback d-block">{errors.eventTime.message}</small>}
-        </div><div className="field-block"><label>Зарегистрировано</label><div className="readonly-value">{initial.eventTime}</div></div></div>
-        <div className="field-block"><label htmlFor="event-checkpoint">Контрольная точка</label>
-            <CheckpointSelect id="event-checkpoint" className="form-control" items={checklistItems} disabled={disabled || saving} {...register('checkpoint')}
-                value={checkpoint} aria-invalid={!!errors.checkpoint} aria-describedby={errors.checkpoint ? 'event-checkpoint-error' : undefined} />
-            {errors.checkpoint && <small id="event-checkpoint-error" className="invalid-feedback d-block" role="alert">{errors.checkpoint.message}</small>}
-        </div>
-        <div className="field-block comment-block"><label htmlFor="event-comment">Комментарий</label>
-            <textarea id="event-comment" className="form-control" rows={4} disabled={disabled || saving} placeholder="Опишите, что наблюдается на видео…" {...register('comment')} />
-            {errors.comment && <small className="invalid-feedback d-block">{errors.comment.message}</small>}
-        </div>
-        <button type="submit" hidden disabled={disabled || !isDirty || saving} />
+            <div className="field-block"><label htmlFor="event-category">Категория</label>
+                <select id="event-category" className="form-control" value={categoryId} disabled={!group || !availableCategories.length}
+                    aria-describedby="event-category-note" onChange={(event) => {
+                        setCategoryOverride(event.target.value);
+                        setValue('checkpoint', '', { shouldDirty: true });
+                        clearErrors('checkpoint');
+                    }}>
+                    <option value="">Не выбрана</option>
+                    {availableCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+                <small id="event-category-note" className="subtle">Фильтр контрольных точек, а не изменение сохранённой категории. Сохранено: {categoryNames.join(' · ') || 'не указано'}.</small>
+            </div>
+            <div className="field-block"><label htmlFor="event-checkpoint">Контрольная точка (при наличии)</label>
+                <CheckpointSelect id="event-checkpoint" className="form-control" items={availableItems} disabled={!categoryId}
+                    {...register('checkpoint', { onChange: () => clearErrors('checkpoint') })} value={checkpoint}
+                    aria-invalid={!!errors.checkpoint} aria-describedby="event-checkpoint-note event-checkpoint-error" />
+                <small id="event-checkpoint-note" className="subtle">{!categoryId ? 'Выберите категорию. ' : ''}Выбор добавляет привязку; существующие контрольные точки не удаляются.</small>
+                {errors.checkpoint && <small id="event-checkpoint-error" className="invalid-feedback d-block" role="alert">{errors.checkpoint.message}</small>}
+            </div>
+            <div className="field-block"><label htmlFor="event-site">Площадка</label>
+                <select id="event-site" className="form-control" value={initial.siteName} disabled aria-describedby="event-site-note">
+                    <option value="">Не указана</option>
+                    {initial.siteName && !facilities.some((item) => item.name === initial.siteName) && <option value={initial.siteName}>{initial.siteName}</option>}
+                    {facilities.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                </select>
+                <small id="event-site-note" className="subtle">Изменение площадки пока не поддерживается API.</small>
+            </div>
+            <div className="time-fields"><div className="field-block"><label htmlFor="event-time">Время события (МСК)</label>
+                <input id="event-time" type="datetime-local" step="1" className="form-control" {...register('eventTime')} />
+                {errors.eventTime && <small className="invalid-feedback d-block">{errors.eventTime.message}</small>}
+            </div><div className="field-block"><label>Зарегистрировано (МСК)</label>
+                <div className="readonly-value">{createdAt ? formatInTimeZone(createdAt, 'Europe/Moscow', 'dd.MM.yyyy HH:mm:ss') : 'Не указано'}</div>
+            </div></div>
+            <div className="field-block comment-block"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                <label htmlFor="event-comment" style={{ fontSize: 10, fontWeight: 600 }}>Комментарий</label>
+                <span className="subtle">{comment.length} / 10000</span>
+            </div>
+                <textarea id="event-comment" className="form-control" rows={4} maxLength={10000} placeholder="Опишите событие…" {...register('comment')} />
+                {errors.comment && <small className="invalid-feedback d-block">{errors.comment.message}</small>}
+            </div>
+        </fieldset>
+        <button type="submit" hidden disabled={locked || !isDirty} />
     </form>;
 }

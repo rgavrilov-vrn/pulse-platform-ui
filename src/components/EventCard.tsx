@@ -31,7 +31,10 @@ export function EventCard({ incident, catalog }: Props) {
         if (!ready) return;
         setSaving(true);
         try {
-            await incidentsApi.update(incident.id, { kind: values.kind, eventTime: values.eventTime, comment: values.comment, checkpoint: values.checkpoint });
+            await incidentsApi.update(incident.id, {
+                kind: values.kind, eventTime: values.eventTime, comment: values.comment,
+                ...(values.checkpoint && values.checkpoint !== checkpoint ? { checkpoint: values.checkpoint } : {}),
+            });
             void qc.invalidateQueries({ queryKey: ['incidents'] });
             void qc.invalidateQueries({ queryKey: ['incident', incident.id] });
             toast.success('Изменения сохранены');
@@ -45,7 +48,7 @@ export function EventCard({ incident, catalog }: Props) {
         {details.isError ? <div className="card-scroll"><p role="alert">Не удалось загрузить подробности события. Сохранение недоступно, чтобы не затереть данные.</p>
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
-            : <EventForm key={incident.id} initial={initial} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={saving} />}
+            : <EventForm key={incident.id} initial={initial} severity={current.severity} createdAt={current.createdAt} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={saving} />}
         <div className="card-actions"><div className="primary-actions">
             <button className="btn btn-primary" disabled={!ready || !isDraft || !current.kind || saving || publish.isPending}
                 title={!current.kind ? 'Сначала выберите тип события и сохраните изменения' : undefined} onClick={() => publish.mutate(incident.id)}>
