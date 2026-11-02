@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 
 const linkStyle: CSSProperties = {
     display: 'flex', flexDirection: 'column', gap: 4,
+    alignItems: 'center', justifyContent: 'center', textAlign: 'center',
     height: 54, minHeight: 54, padding: '6px 2px',
     textDecoration: 'none', fontSize: 9, lineHeight: 1.2,
 };
