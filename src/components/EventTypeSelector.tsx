@@ -19,7 +19,7 @@ export function EventTypeSelector({ groups, value, disabled, error, onChange }: 
                 return <button key={group.id} type="button" className={selected ? 'active' : ''} aria-pressed={selected}
                     disabled={kind === null} style={{ flex: '1 1 120px' }}
                     title={kind === null ? `Код группы ${group.code} не поддерживается контрактом IncidentKind` : undefined}
-                    onClick={() => { if (kind !== null) onChange(kind); }}>{group.name}</button>;
+                    onClick={() => { if (kind !== null) onChange(kind); }}>{kind === 'notice' ? 'Событие' : group.name}</button>;
             })}
         </div>
         {!options.length && <small style={{ display: 'block', marginTop: 8, color: 'var(--muted)' }}>Справочник типов события пока недоступен.</small>}
