@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import { api } from '../api/client';
 import { materialsApi, type IncidentMaterial } from '../api/materials';
 import { MaterialPreview } from './MaterialPreview';
 import './IncidentMaterials.css';
@@ -13,7 +14,7 @@ function message(error: unknown): string {
         if (error.response?.status === 413) return 'Файл превышает разрешённый размер.';
         if (error.response?.status === 415) return 'Этот формат файла не поддерживается.';
         if (error.response?.status === 403) return 'Недостаточно прав для работы с материалами.';
-        if (error.response?.status === 409) return 'Прикладывать файлы можно только к черновику.';
+        if (error.response?.status === 409) return 'Изменять материалы можно только у черновика; файл должен находиться в локальном хранилище.';
         if (error.response?.status === 404) return 'Инцидент или файл не найден.';
         if (typeof error.response?.data?.message === 'string') return error.response.data.message;
         if (typeof error.response?.data?.detail === 'string') return error.response.data.detail;
@@ -31,7 +32,9 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
     const dragDepth = useRef(0);
     const [dragging, setDragging] = useState(false);
     const [jobs, setJobs] = useState<Job[]>([]);
-    const [busy, setBusy] = useState(false);
+    const [uploadBusy, setBusy] = useState(false);
+    const [deleting, setDeleting] = useState<string | null>(null);
+    const busy = uploadBusy || !!deleting;
     const [downloading, setDownloading] = useState<string | null>(null);
     const query = useQuery({
         queryKey: ['incident-materials', incidentId],
@@ -86,11 +89,37 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
         void upload(batch);
     }
     async function download(material: IncidentMaterial) {
-        if (downloading) return;
+        if (downloading || busy) return;
         setDownloading(material.id);
         try { await materialsApi.download(incidentId, material); }
         catch (error) { toast.error(message(error)); }
         finally { setDownloading(null); }
+    }
+    async function remove(material: IncidentMaterial) {
+        if (!canUpload || running.current || downloading) return;
+        if (!window.confirm(`Удалить вложение «${material.fileName}»? Если файл больше нигде не используется, он будет удалён с диска. Это действие нельзя отменить.`)) return;
+        running.current = true;
+        setDeleting(material.id);
+        onUploadingChange(true);
+        try {
+            await api.delete(`/api/v1/incidents/${encodeURIComponent(incidentId)}/materials/${encodeURIComponent(material.id)}`);
+            await qc.cancelQueries({ queryKey: ['incident-materials', incidentId], exact: true });
+            qc.setQueryData<IncidentMaterial[]>(['incident-materials', incidentId], (current) =>
+                (current ?? []).filter((item) => item.id !== material.id));
+            setJobs((current) => current.filter((job) => job.state !== 'done'));
+            toast.success('Вложение удалено');
+            await Promise.all([
+                qc.invalidateQueries({ queryKey: ['incident-materials', incidentId], exact: true }),
+                qc.invalidateQueries({ queryKey: ['incidents'] }),
+            ]);
+        } catch (error) {
+            toast.error(message(error));
+            void qc.invalidateQueries({ queryKey: ['incident-materials', incidentId], exact: true });
+        } finally {
+            running.current = false;
+            setDeleting(null);
+            onUploadingChange(false);
+        }
     }
     return <section className="incident-materials" aria-label="Материалы события"
         onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
@@ -123,7 +152,7 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
                 if (!dragDepth.current) setDragging(false);
             }}
             onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = busy ? 'none' : 'copy'; }}>
-            <span>{busy ? 'Идёт загрузка файлов…' : dragging ? 'Отпустите файлы для загрузки' : 'Перетащите файлы сюда'}</span>
+            <span>{deleting ? 'Удаление вложения…' : busy ? 'Идёт загрузка файлов…' : dragging ? 'Отпустите файлы для загрузки' : 'Перетащите файлы сюда'}</span>
             <small>или нажмите, чтобы выбрать на компьютере</small>
         </div>}
         {canUpload && <p className="subtle">Фото, видео и документы. Файлы сохраняются сразу, отдельно от кнопки «Сохранить». Размер ограничивается настройками сервера.</p>}
@@ -136,8 +165,14 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
                 <MaterialPreview incidentId={incidentId} material={material} />
                 <small>{size(material.sizeBytes)}</small>
             </div>
-            <button type="button" className="btn btn-outline-secondary" disabled={!!downloading} onClick={() => void download(material)}
-                aria-label={`Скачать ${material.fileName}`}>{downloading === material.id ? 'Скачивание…' : 'Скачать'}</button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
+                <button type="button" className="btn btn-outline-secondary" disabled={!!downloading || busy} onClick={() => void download(material)}
+                    aria-label={`Скачать ${material.fileName}`}>{downloading === material.id ? 'Скачивание…' : 'Скачать'}</button>
+                {canUpload && <button type="button" className="btn btn-outline-secondary" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                    disabled={busy || !!downloading} onClick={() => void remove(material)} aria-label={`Удалить ${material.fileName}`}>
+                    {deleting === material.id ? 'Удаление…' : 'Удалить'}
+                </button>}
+            </div>
         </li>)}</ul>}
         {!!jobs.length && <ul className="incident-upload-list" aria-live="polite">{jobs.map((job) => <li key={job.id}>
             <span>{job.file.name}</span>
