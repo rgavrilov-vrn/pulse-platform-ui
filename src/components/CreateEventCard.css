@@ -1,2 +1,62 @@
 .new-event{padding:11px 17px;gap:8px}.new-event svg{flex:none}.create-event-card .card-scroll{padding-top:0}.create-source-strip{display:flex;justify-content:space-between;gap:12px;padding:16px 0;color:var(--muted);font-size:10px}.create-source-strip>span:last-child{text-align:right;font-size:9px}.create-event-card legend,.create-field-label{display:block;float:none;font-size:10px;font-weight:600;margin-bottom:8px;color:var(--text)}.create-choice-grid{display:flex;flex-wrap:wrap;gap:6px;width:100%}.create-choice-grid button{flex:1 1 120px;min-width:0;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--muted);font-size:10px;padding:7px 10px;text-align:center;overflow-wrap:anywhere}.create-choice-grid button.active{border-color:var(--primary);background:var(--selected);color:var(--primary);font-weight:600}.create-label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:10px}.create-label-row label{font-size:10px;font-weight:600}.create-label-row span,.create-catalog-note{font-size:10px;color:var(--muted)}.create-catalog-note{margin-bottom:16px;line-height:1.6}.create-error{font-size:12px;color:var(--danger);margin:12px 0;overflow-wrap:anywhere}
 @media(max-width:560px){.page-heading>.new-event{font-size:10px;padding:9px}.page-heading>.new-event svg{width:14px;height:14px}}
+
+.create-choice-grid[aria-label="Критичность"] > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 34px;
+    color: var(--severity-fg);
+    background: var(--severity-bg);
+    border-color: var(--severity-border);
+    transition: box-shadow .15s ease, border-color .15s ease;
+}
+.create-choice-grid[aria-label="Критичность"] > button::before {
+    content: '';
+    display: block;
+    width: 14px;
+    height: 14px;
+    flex: none;
+    background: currentColor;
+    -webkit-mask: var(--severity-icon) center / contain no-repeat;
+    mask: var(--severity-icon) center / contain no-repeat;
+}
+.create-choice-grid[aria-label="Критичность"] > button:nth-child(1) {
+    --severity-fg: #385774; --severity-bg: #e9eff7; --severity-border: #bdcede;
+    --severity-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4v16m-6-6 6 6 6-6'/%3E%3C/svg%3E");
+}
+.create-choice-grid[aria-label="Критичность"] > button:nth-child(2) {
+    --severity-fg: #80500b; --severity-bg: #fff1d8; --severity-border: #e3c18a;
+    --severity-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+}
+.create-choice-grid[aria-label="Критичность"] > button:nth-child(3) {
+    --severity-fg: #943d0b; --severity-bg: #ffead9; --severity-border: #e6b08a;
+    --severity-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 20V4m-6 6 6-6 6 6'/%3E%3C/svg%3E");
+}
+.create-choice-grid[aria-label="Критичность"] > button:nth-child(4) {
+    --severity-fg: #9c2924; --severity-bg: #fae8e5; --severity-border: #dfaaa5;
+    --severity-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3 22 21H2Z M12 9v5m0 3h.01'/%3E%3C/svg%3E");
+}
+.create-choice-grid[aria-label="Критичность"] > button.active {
+    border-color: currentColor;
+    box-shadow: inset 0 0 0 1px currentColor;
+    font-weight: 700;
+}
+.create-choice-grid[aria-label="Критичность"] > button:hover:not(:disabled) {
+    border-color: currentColor;
+}
+.create-choice-grid[aria-label="Критичность"] > button:disabled { opacity: .65; }
+.create-choice-grid[aria-label="Критичность"] > button.active:disabled { opacity: 1; }
+[data-bs-theme=dark] .create-choice-grid[aria-label="Критичность"] > button:nth-child(1) {
+    --severity-fg: #bdd1ed; --severity-bg: #283447; --severity-border: #52657e;
+}
+[data-bs-theme=dark] .create-choice-grid[aria-label="Критичность"] > button:nth-child(2) {
+    --severity-fg: #f0ce88; --severity-bg: #433a21; --severity-border: #897044;
+}
+[data-bs-theme=dark] .create-choice-grid[aria-label="Критичность"] > button:nth-child(3) {
+    --severity-fg: #ffc294; --severity-bg: #482f20; --severity-border: #98603c;
+}
+[data-bs-theme=dark] .create-choice-grid[aria-label="Критичность"] > button:nth-child(4) {
+    --severity-fg: #ffb4ab; --severity-bg: #482d28; --severity-border: #985b54;
+}
