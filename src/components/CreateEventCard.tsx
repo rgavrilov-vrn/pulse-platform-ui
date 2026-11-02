@@ -13,7 +13,7 @@ import './CreateEventCard.css';
 interface Props { catalog: Catalog | undefined; onCreated: (incident: IncidentSummary) => void; onCancel: () => void }
 export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
     const qc = useQueryClient();
-    const [kind, setKind] = useState<IncidentKind | null>(null);
+    const [kind, setKind] = useState<IncidentKind>('incident');
     const [site, setSite] = useState('');
     const [time, setTime] = useState(() => formatInTimeZone(new Date(), 'Europe/Moscow', "yyyy-MM-dd'T'HH:mm:ss"));
     const [checkpoint, setCheckpoint] = useState('');
@@ -27,7 +27,7 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
     const categories = Array.isArray(catalog?.categories) ? catalog.categories : [];
     const checklistItems = Array.isArray(catalog?.checklistItems) ? catalog.checklistItems : [];
     const facilities = Array.isArray(catalog?.facilities) ? catalog.facilities : [];
-    const selectedGroup = kind ? groups.find((group) => fromApiKind(group.code) === kind) : undefined;
+    const selectedGroup = groups.find((group) => fromApiKind(group.code) === kind);
     const availableCategories = selectedGroup ? categories.filter((item) => item.groupId === selectedGroup.id) : [];
     const availableChecklistItems: ChecklistItem[] = categoryId
         ? checklistItems.filter((item) => item.categoryId === categoryId)
@@ -35,6 +35,11 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
     const selectedChecklistItem = availableChecklistItems.find((item) => item.id === checklistItemId);
     const mutation = useMutation({ mutationFn: createManualIncident });
     const pending = mutation.isPending;
+    useEffect(() => {
+        if (categoryId || !selectedGroup) return;
+        const defaultCategory = availableCategories.find((item) => item.name === 'Биобезопасность');
+        if (defaultCategory) setCategoryId(defaultCategory.id);
+    }, [availableCategories, categoryId, selectedGroup]);
     useEffect(() => {
         const warn = (event: BeforeUnloadEvent) => { if (dirty || pending) { event.preventDefault(); event.returnValue = ''; } };
         window.addEventListener('beforeunload', warn);
@@ -79,6 +84,8 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
                 setKind(value); setDirty(true);
             }} />
             <fieldset disabled={pending}>
+                <div className="field-block"><label htmlFor="create-severity">Критичность</label><select id="create-severity" className="form-control" value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}>
+                    <option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option></select></div>
                 <div className="field-block"><label htmlFor="create-category">Категория</label>
                     <select id="create-category" className="form-control" value={categoryId} disabled={!selectedGroup}
                         onChange={(e) => { setCategoryId(e.target.value); setChecklistItemId(''); setDirty(true); }}>
@@ -104,8 +111,6 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
                 <div className="time-fields"><div className="field-block"><label htmlFor="create-time">Время события (МСК)</label>
                     <input id="create-time" className="form-control" type="datetime-local" step="1" required value={time} onChange={(e) => setTime(e.target.value)} /></div>
                     <div className="field-block"><label>Зарегистрировано</label><div className="readonly-value">Будет назначено сервером</div></div></div>
-                <div className="field-block"><label htmlFor="create-severity">Критичность</label><select id="create-severity" className="form-control" value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}>
-                    <option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option></select></div>
                 <div className="field-block"><div className="create-label-row"><label htmlFor="create-comment">Комментарий</label><span>{comment.length} / 10000</span></div>
                     <textarea id="create-comment" className="form-control" rows={4} required maxLength={10000} value={comment} placeholder="Опишите событие…" onChange={(e) => setComment(e.target.value)} /></div>
             </fieldset>
