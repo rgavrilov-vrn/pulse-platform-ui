@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import toast from 'react-hot-toast';
@@ -26,6 +26,8 @@ function size(bytes: number): string {
 }
 export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: Props) {
     const qc = useQueryClient();
+    const contentId = useId();
+    const [collapsed, setCollapsed] = useState(false);
     const input = useRef<HTMLInputElement>(null);
     const controller = useRef<AbortController | null>(null);
     const running = useRef(false);
@@ -84,6 +86,7 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
     }
     function addFiles(files: File[]) {
         if (!files.length || !canUpload || running.current) return;
+        setCollapsed(false);
         const batch: Job[] = files.map((file) => ({ id: crypto.randomUUID(), file, state: 'queued', progress: 0 }));
         setJobs((current) => [...current, ...batch]);
         void upload(batch);
@@ -129,9 +132,15 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
             addFiles(Array.from(event.dataTransfer.files));
         }}>
         <div className="incident-materials-heading">
-            <h3>Материалы {query.data ? `(${query.data.length})` : ''}</h3>
-            {canUpload && <button type="button" className="btn btn-outline-secondary" disabled={busy} onClick={() => input.current?.click()}>Прикрепить файлы</button>}
+            <h3><button type="button" aria-expanded={!collapsed} aria-controls={contentId}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', color: 'inherit', font: 'inherit', padding: '6px 0' }}
+                onClick={() => setCollapsed((value) => !value)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ transform: collapsed ? 'rotate(-90deg)' : undefined }}><path d="m6 9 6 6 6-6" /></svg>
+                Материалы {query.data ? `(${query.data.length})` : ''}
+            </button></h3>
+            {canUpload && !collapsed && <button type="button" className="btn btn-outline-secondary" disabled={busy} onClick={() => input.current?.click()}>Прикрепить файлы</button>}
         </div>
+        <div id={contentId} hidden={collapsed}>
         <input ref={input} type="file" hidden multiple disabled={!canUpload || busy}
             accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,.csv,.mp4,.webm,.docx,.xlsx" onChange={(event) => {
                 addFiles(Array.from(event.target.files ?? []));
@@ -166,11 +175,15 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
                 <small>{size(material.sizeBytes)}</small>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
-                <button type="button" className="btn btn-outline-secondary" disabled={!!downloading || busy} onClick={() => void download(material)}
-                    aria-label={`Скачать ${material.fileName}`}>{downloading === material.id ? 'Скачивание…' : 'Скачать'}</button>
-                {canUpload && <button type="button" className="btn btn-outline-secondary" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                    disabled={busy || !!downloading} onClick={() => void remove(material)} aria-label={`Удалить ${material.fileName}`}>
-                    {deleting === material.id ? 'Удаление…' : 'Удалить'}
+                <button type="button" className="btn btn-outline-secondary" style={{ padding: 0, width: 34, height: 34 }}
+                    disabled={!!downloading || busy} onClick={() => void download(material)} title={downloading === material.id ? 'Скачивание…' : 'Скачать'}
+                    aria-label={`Скачать ${material.fileName}`} aria-busy={downloading === material.id}>
+                    {downloading === material.id ? <span aria-hidden="true">…</span> : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" /></svg>}
+                </button>
+                {canUpload && <button type="button" className="btn btn-outline-secondary" style={{ padding: 0, width: 34, height: 34, color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                    disabled={busy || !!downloading} onClick={() => void remove(material)} title={deleting === material.id ? 'Удаление…' : 'Удалить'}
+                    aria-label={`Удалить ${material.fileName}`} aria-busy={deleting === material.id}>
+                    {deleting === material.id ? <span aria-hidden="true">…</span> : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" /></svg>}
                 </button>}
             </div>
         </li>)}</ul>}
@@ -183,5 +196,6 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
             {job.state === 'failed' && <><p role="alert" className="incident-upload-error">{job.error}</p>
                 {canUpload && <button type="button" className="btn btn-outline-secondary" disabled={busy} onClick={() => void upload([job])}>Повторить</button>}</>}
         </li>)}</ul>}
+        </div>
     </section>;
 }
