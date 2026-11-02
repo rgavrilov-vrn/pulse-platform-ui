@@ -25,13 +25,16 @@ function nonEmptyString(value: unknown): string | null {
     return typeof value === 'string' && value.trim() ? value : null;
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown> : undefined;
+}
+
 export function fromApiIncident<T extends IncidentSummary>(incident: ApiIncident<T>): T {
-    const metadata = 'metadata' in incident ? incident.metadata : undefined;
-    const metadataSiteName = metadata !== null && typeof metadata === 'object'
-        && !Array.isArray(metadata) && 'siteName' in metadata ? metadata.siteName : undefined;
+    const metadata = record('metadata' in incident ? incident.metadata : undefined);
     return {
         ...incident,
-        kind: fromApiKind(incident.kind),
-        siteName: nonEmptyString(incident.siteName) ?? nonEmptyString(metadataSiteName),
+        kind: fromApiKind(incident.kind) ?? fromApiKind(metadata?.kind),
+        siteName: nonEmptyString(incident.siteName) ?? nonEmptyString(metadata?.siteName),
     } as T;
 }

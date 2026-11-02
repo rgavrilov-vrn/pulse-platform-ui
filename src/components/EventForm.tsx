@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -21,9 +21,17 @@ interface Props {
 }
 export function EventForm({ initial, severity, categoryNames = [], catalog, disabled, saving, onSave }: Props) {
     const [categoryOverride, setCategoryOverride] = useState<string | null>(null);
-    const { register, handleSubmit, watch, setValue, setError, clearErrors, formState: { errors, isDirty } } = useForm<EventFormValues>({
+    const { register, handleSubmit, watch, setValue, getValues, getFieldState, setError, clearErrors, formState: { errors, isDirty } } = useForm<EventFormValues>({
         resolver: zodResolver(schema), defaultValues: { kind: initial.kind ?? undefined, siteName: initial.siteName,
             eventTime: formatInTimeZone(initial.eventTime, 'Europe/Moscow', "yyyy-MM-dd'T'HH:mm:ss"), comment: initial.comment, checkpoint: initial.checkpoint } });
+    useEffect(() => {
+        if (initial.kind && !getFieldState('kind').isDirty && getValues('kind') !== initial.kind) {
+            setValue('kind', initial.kind, { shouldDirty: false, shouldValidate: true });
+        }
+        if (!getFieldState('checkpoint').isDirty && getValues('checkpoint') !== initial.checkpoint) {
+            setValue('checkpoint', initial.checkpoint, { shouldDirty: false, shouldValidate: true });
+        }
+    }, [initial.kind, initial.checkpoint, getFieldState, getValues, setValue]);
     const kind = watch('kind');
     const checkpoint = watch('checkpoint') ?? '';
     const comment = watch('comment') ?? '';
