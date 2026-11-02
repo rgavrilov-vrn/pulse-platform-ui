@@ -51,13 +51,13 @@ export function EventCard({ incident, catalog }: Props) {
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
             : <EventForm key={incident.id} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={saving} />}
-        <div className="card-actions event-card-actions"><div className="primary-actions">
+        {current.status !== 'CANCELLED' && <div className="card-actions event-card-actions"><div className="primary-actions">
             {isDraft && <button className="btn btn-primary" disabled={!ready || !current.kind || saving || publish.isPending} title={!current.kind ? 'Сначала выберите тип события и сохраните изменения' : undefined} onClick={() => publish.mutate(incident.id)}>
                 Опубликовать</button>}
             <button className="btn btn-outline-secondary" disabled={!ready || !isDraft || saving} type="submit" form="event-form">Сохранить</button>
         </div>
             {isDraft && <button type="button" className="cancel-button" disabled={!ready || saving} onClick={() => setDialog('cancel')}>Отменить регистрацию</button>}
-        </div>
+        </div>}
         {isDraft && dialog === 'cancel' && <ActionDialog title="Отменить регистрацию?" description="Запись останется в реестре со статусом «Отменено»." requireReason confirmLabel="Отменить регистрацию" onConfirm={(reason) => { cancel.mutate({ id: incident.id, reason }); setDialog(null); }} onCancel={() => setDialog(null)} />}
     </aside>;
 }
