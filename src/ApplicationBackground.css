@@ -1,0 +1,32 @@
+:root {
+    --app-background: linear-gradient(180deg, #ffffff0f, #00000026), radial-gradient(circle at 18% 22%, #17563c 0, transparent 42%), radial-gradient(circle at 82% 78%, #09779a 0, transparent 38%), linear-gradient(135deg, #0b3826, #101a16);
+}
+
+body {
+    background-color: #101a16;
+    background-image: var(--app-background);
+    background-attachment: fixed;
+    background-size: cover;
+    min-height: 100dvh;
+}
+
+#root, .app-body, .workspace {
+    background: transparent;
+}
+
+.login-backdrop {
+    background: var(--app-background);
+    opacity: 1;
+}
+
+.login-backdrop::after {
+    background: none;
+}
+
+.page-heading h1 {
+    color: #fff;
+}
+
+.breadcrumb-line, .breadcrumb-line span, .page-heading .live-indicator {
+    color: #ffffffc7;
+}
