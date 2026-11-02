@@ -5,8 +5,8 @@ import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import toast from 'react-hot-toast';
 import { createManualIncident } from '../api/createIncident';
 import { fromApiKind } from '../api/incidentKind';
-import type { Catalog, IncidentKind, IncidentSeverity, IncidentSummary } from '../api/types';
-import { CheckpointSelect, isCheckpoint } from './CheckpointSelect';
+import type { Catalog, ChecklistItem, IncidentKind, IncidentSeverity, IncidentSummary } from '../api/types';
+import { CheckpointSelect } from './CheckpointSelect';
 import { EventTypeSelector } from './EventTypeSelector';
 import './CreateEventCard.css';
 
@@ -20,13 +20,19 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
     const [comment, setComment] = useState('');
     const [severity, setSeverity] = useState<IncidentSeverity>('MEDIUM');
     const [categoryId, setCategoryId] = useState('');
+    const [checklistItemId, setChecklistItemId] = useState('');
     const [dirty, setDirty] = useState(false);
     const [error, setError] = useState('');
     const groups = Array.isArray(catalog?.groups) ? catalog.groups : [];
     const categories = Array.isArray(catalog?.categories) ? catalog.categories : [];
+    const checklistItems = Array.isArray(catalog?.checklistItems) ? catalog.checklistItems : [];
     const facilities = Array.isArray(catalog?.facilities) ? catalog.facilities : [];
     const selectedGroup = kind ? groups.find((group) => fromApiKind(group.code) === kind) : undefined;
     const availableCategories = selectedGroup ? categories.filter((item) => item.groupId === selectedGroup.id) : [];
+    const availableChecklistItems: ChecklistItem[] = categoryId
+        ? checklistItems.filter((item) => item.categoryId === categoryId)
+        : [];
+    const selectedChecklistItem = availableChecklistItems.find((item) => item.id === checklistItemId);
     const mutation = useMutation({ mutationFn: createManualIncident });
     const pending = mutation.isPending;
     useEffect(() => {
@@ -40,16 +46,18 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
         if (pending) return;
         if (!kind || !selectedGroup) { setError('Выберите тип события из справочника.'); return; }
         if (!site.trim() || !comment.trim()) { setError('Укажите площадку и комментарий.'); return; }
-        if (!isCheckpoint(checkpoint)) { setError('Выберите контрольную точку из списка.'); return; }
         const eventTime = fromZonedTime(time, 'Europe/Moscow');
         if (Number.isNaN(eventTime.getTime())) { setError('Укажите корректное время события.'); return; }
         const category = availableCategories.find((item) => item.id === categoryId);
         if (categoryId && !category) { setError('Категория не принадлежит выбранному типу. Выберите категорию заново.'); return; }
+        if (checklistItemId && !selectedChecklistItem) { setError('Контрольная точка не принадлежит выбранной категории. Выберите её заново.'); return; }
         setError('');
         try {
             const created = await mutation.mutateAsync({
                 source: 'manual', creationMode: 'MANUAL', eventTime: eventTime.toISOString(), severity, comment: comment.trim(),
-                metadata: { kind, siteName: site.trim(), checkpoint, directionId: selectedGroup.id, directionName: selectedGroup.name,
+                metadata: { kind, siteName: site.trim(), checkpoint: selectedChecklistItem?.code ?? '',
+                    checklistItemId: selectedChecklistItem?.id, checklistItemName: selectedChecklistItem?.name,
+                    directionId: selectedGroup.id, directionName: selectedGroup.name,
                     categoryId: category?.id, categoryName: category?.name },
             });
             void qc.invalidateQueries({ queryKey: ['incidents'] });
@@ -67,14 +75,28 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
         <form id="create-event-form" className="card-scroll" onSubmit={submit} onChange={() => setDirty(true)}>
             <div className="create-source-strip"><span>Ручная регистрация</span><span>{dirty ? 'Есть несохранённые изменения' : 'Заполните данные события'}</span></div>
             <EventTypeSelector groups={groups} value={kind} disabled={pending} onChange={(value) => {
-                if (value !== kind) setCategoryId(''); setKind(value); setDirty(true);
+                if (value !== kind) { setCategoryId(''); setChecklistItemId(''); }
+                setKind(value); setDirty(true);
             }} />
             <fieldset disabled={pending}>
-                <div className="field-block"><span className="create-field-label">Категория</span>
-                    {!selectedGroup ? <small className="create-catalog-note">Сначала выберите тип события.</small>
-                        : !availableCategories.length ? <small className="create-catalog-note">Для выбранного типа категории не загружены.</small>
-                        : <div className="create-choice-grid">{availableCategories.map((item) => <button key={item.id} type="button" className={categoryId === item.id ? 'active' : ''} aria-pressed={categoryId === item.id}
-                            onClick={() => { setCategoryId(item.id); setDirty(true); }}>{item.name}</button>)}</div>}
+                <div className="field-block"><label htmlFor="create-category">Категория</label>
+                    <select id="create-category" className="form-control" value={categoryId} disabled={!selectedGroup}
+                        onChange={(e) => { setCategoryId(e.target.value); setChecklistItemId(''); setDirty(true); }}>
+                        <option value="">Не выбрана</option>
+                        {availableCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                    {!selectedGroup && <small className="create-catalog-note">Сначала выберите тип события.</small>}
+                    {selectedGroup && !availableCategories.length && <small className="create-catalog-note">Для выбранного типа категории не загружены.</small>}
+                </div>
+                <div className="field-block"><label htmlFor="create-checkpoint">Контрольная точка (при наличии)</label>
+                    <CheckpointSelect id="create-checkpoint" className="form-control" items={availableChecklistItems}
+                        value={selectedChecklistItem?.code ?? ''} disabled={!categoryId}
+                        onChange={(e) => {
+                            const item = availableChecklistItems.find((candidate) => candidate.code === e.target.value);
+                            setChecklistItemId(item?.id ?? ''); setDirty(true);
+                        }} />
+                    {!categoryId && <small className="create-catalog-note">Сначала выберите категорию.</small>}
+                    {categoryId && !availableChecklistItems.length && <small className="create-catalog-note">Для выбранной категории контрольные точки не загружены.</small>}
                 </div>
                 <div className="field-block"><label htmlFor="create-site">Площадка</label>
                     <input id="create-site" className="form-control" list="create-sites" value={site} required autoFocus onChange={(e) => setSite(e.target.value)} />
@@ -84,8 +106,6 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
                     <div className="field-block"><label>Зарегистрировано</label><div className="readonly-value">Будет назначено сервером</div></div></div>
                 <div className="field-block"><label htmlFor="create-severity">Критичность</label><select id="create-severity" className="form-control" value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}>
                     <option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option></select></div>
-                <div className="field-block"><label htmlFor="create-checkpoint">Контрольная точка (при наличии)</label>
-                    <CheckpointSelect id="create-checkpoint" className="form-control" value={checkpoint} onChange={(e) => setCheckpoint(e.target.value)} /></div>
                 <div className="field-block"><div className="create-label-row"><label htmlFor="create-comment">Комментарий</label><span>{comment.length} / 10000</span></div>
                     <textarea id="create-comment" className="form-control" rows={4} required maxLength={10000} value={comment} placeholder="Опишите событие…" onChange={(e) => setComment(e.target.value)} /></div>
             </fieldset>

@@ -74,6 +74,7 @@ export interface Category {
 export interface ChecklistItem {
     id: string;
     categoryId: string;
+    code: string;
     name: string;
     commentTemplate?: string;
 }
