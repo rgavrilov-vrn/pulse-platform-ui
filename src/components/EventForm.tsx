@@ -8,6 +8,10 @@ import { fromApiKind } from '../api/incidentKind';
 import { CheckpointSelect } from './CheckpointSelect';
 import { EventTypeSelector } from './EventTypeSelector';
 import './CreateEventCard.css';
+const severityOptions: { value: IncidentSeverity; label: string }[] = [
+    { value: 'LOW', label: 'Низкая' }, { value: 'MEDIUM', label: 'Средняя' },
+    { value: 'HIGH', label: 'Высокая' }, { value: 'CRITICAL', label: 'Критическая' },
+];
 const schema = z.object({ kind: z.enum(['notice', 'incident']), siteName: z.string(), eventTime: z.string().min(1, 'Укажите время'),
     comment: z.string().trim().min(1, 'Комментарий обязателен').max(10_000), checkpoint: z.string().optional() });
 export type EventFormValues = z.infer<typeof schema>;
@@ -50,10 +54,11 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
             setValue('kind', value, { shouldDirty: true, shouldValidate: true });
         }} />
         <fieldset disabled={locked}>
-            <div className="field-block"><label htmlFor="event-severity">Критичность</label>
-                <select id="event-severity" className="form-control" value={severity ?? 'MEDIUM'} disabled aria-describedby="event-severity-note">
-                    <option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option>
-                </select>
+            <div className="field-block">
+                <div className="create-choice-grid" role="group" aria-label="Критичность" aria-describedby="event-severity-note">
+                    {severityOptions.map((option) => <button key={option.value} type="button" disabled className={(severity ?? 'MEDIUM') === option.value ? 'active' : ''}
+                        aria-pressed={(severity ?? 'MEDIUM') === option.value}>{option.label}</button>)}
+                </div>
                 <small id="event-severity-note" className="subtle">Изменение критичности пока не поддерживается API.</small>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12 }}>
@@ -70,8 +75,8 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
                     {errors.eventTime && <small className="invalid-feedback d-block">{errors.eventTime.message}</small>}
                 </div>
             </div>
-            <div className="field-block"><span id="event-category-label" className="create-field-label">Категория</span>
-                <div className="create-choice-grid" role="group" aria-labelledby="event-category-label" aria-describedby="event-category-note">
+            <div className="field-block">
+                <div className="create-choice-grid" role="group" aria-label="Категория" aria-describedby="event-category-note">
                     {availableCategories.map((item) => <button key={item.id} type="button" className={categoryId === item.id ? 'active' : ''} aria-pressed={categoryId === item.id} onClick={() => {
                         if (categoryId !== item.id) { setCategoryOverride(item.id); setValue('checkpoint', '', { shouldDirty: true }); clearErrors('checkpoint'); }
                     }}>{item.name}</button>)}
