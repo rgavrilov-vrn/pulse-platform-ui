@@ -29,7 +29,7 @@ export function LoginPage() {
             <div className="login-backdrop" aria-hidden="true" />
             <main className="login-card" aria-labelledby="login-title">
                 <div className="login-brand">
-                    <span className="login-brand-mark" aria-hidden="true">P</span>
+                    <img className="login-brand-logo" src="/favicon.svg" alt="Логотип Pulse Platform" width="48" height="46" />
                     <div>
                         <span className="login-overline">PULSE PLATFORM</span>
                         <h1 id="login-title">Вход в АРМ</h1>
