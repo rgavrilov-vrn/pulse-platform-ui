@@ -98,9 +98,9 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
         catch (error) { toast.error(message(error)); }
         finally { setDownloading(null); }
     }
-    async function remove(material: IncidentMaterial) {
-        if (!canUpload || running.current || downloading) return;
-        if (!window.confirm(`Удалить вложение «${material.fileName}»? Если файл больше нигде не используется, он будет удалён с диска. Это действие нельзя отменить.`)) return;
+    async function remove(material: IncidentMaterial): Promise<boolean> {
+        if (!canUpload || running.current || downloading) return false;
+        if (!window.confirm(`Удалить вложение «${material.fileName}»? Если файл больше нигде не используется, он будет удалён с диска. Это действие нельзя отменить.`)) return false;
         running.current = true;
         setDeleting(material.id);
         onUploadingChange(true);
@@ -115,9 +115,11 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
                 qc.invalidateQueries({ queryKey: ['incident-materials', incidentId], exact: true }),
                 qc.invalidateQueries({ queryKey: ['incidents'] }),
             ]);
+            return true;
         } catch (error) {
             toast.error(message(error));
             void qc.invalidateQueries({ queryKey: ['incident-materials', incidentId], exact: true });
+            return false;
         } finally {
             running.current = false;
             setDeleting(null);
@@ -171,7 +173,7 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
         {query.isSuccess && !query.data.length && <p className="subtle">Прикреплённых файлов пока нет.</p>}
         {!!query.data?.length && <ul className="incident-material-list">{query.data.map((material) => <li key={material.id}>
             <div className="incident-material-name">
-                <MaterialPreview incidentId={incidentId} material={material} />
+                <MaterialPreview incidentId={incidentId} material={material} canDelete={canUpload} busy={busy || !!downloading} deleting={deleting === material.id} onDelete={() => remove(material)} />
                 <small>{size(material.sizeBytes)}</small>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>

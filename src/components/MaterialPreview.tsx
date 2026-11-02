@@ -4,8 +4,15 @@ import { materialsApi, type IncidentMaterial } from '../api/materials';
 import toast from 'react-hot-toast';
 import './MaterialPreview.css';
 
-interface Props { incidentId: string; material: IncidentMaterial }
-export function MaterialPreview({ incidentId, material }: Props) {
+interface Props {
+    incidentId: string;
+    material: IncidentMaterial;
+    canDelete?: boolean;
+    busy?: boolean;
+    deleting?: boolean;
+    onDelete?: () => Promise<boolean>;
+}
+export function MaterialPreview({ incidentId, material, canDelete = false, busy = false, deleting = false, onDelete }: Props) {
     const titleId = useId();
     const dialog = useRef<HTMLDialogElement>(null);
     const container = useRef<HTMLDivElement>(null);
@@ -16,6 +23,8 @@ export function MaterialPreview({ incidentId, material }: Props) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [removing, setRemoving] = useState(false);
+    const actionBusy = busy || downloading || removing;
     const image = ['image/jpeg', 'image/png', 'image/webp'].includes(material.mimeType);
     const video = ['video/mp4', 'video/webm'].includes(material.mimeType);
     const pdf = material.mimeType === 'application/pdf';
@@ -60,10 +69,17 @@ export function MaterialPreview({ incidentId, material }: Props) {
         if (!open && element?.open) element.close();
     }, [open]);
     async function download() {
+        if (actionBusy) return;
         setDownloading(true);
         try { await materialsApi.download(incidentId, material); }
         catch { toast.error('Не удалось скачать файл.'); }
         finally { setDownloading(false); }
+    }
+    async function remove() {
+        if (!canDelete || !onDelete || actionBusy) return;
+        setRemoving(true);
+        try { if (await onDelete()) setOpen(false); }
+        finally { setRemoving(false); }
     }
     return <div ref={container} className="material-preview">
         {image && <button type="button" className="material-thumbnail" onClick={() => setOpen(true)} aria-label={`Просмотреть ${material.fileName}`}>
@@ -74,7 +90,9 @@ export function MaterialPreview({ incidentId, material }: Props) {
         <dialog ref={dialog} className="material-preview-dialog" aria-labelledby={titleId}
             onClose={() => setOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
             <div className="material-preview-heading"><h2 id={titleId}>{material.fileName}</h2>
-                <button type="button" className="icon-btn" aria-label="Закрыть просмотр" onClick={() => setOpen(false)}>×</button></div>
+                <button type="button" className="icon-btn" aria-label="Закрыть просмотр" onClick={() => setOpen(false)}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
+                </button></div>
             {open && <div className="material-preview-content">
                 {loading && <p role="status">Загрузка файла…</p>}
                 {error && <p role="alert">{error}</p>}
@@ -85,8 +103,18 @@ export function MaterialPreview({ incidentId, material }: Props) {
                 {!loading && !error && textual && <pre>{text}</pre>}
             </div>}
             <div className="material-preview-actions">
-                <button type="button" className="btn btn-outline-secondary" disabled={downloading} onClick={() => void download()}>{downloading ? 'Скачивание…' : 'Скачать'}</button>
-                <button type="button" className="btn btn-outline-secondary" onClick={() => setOpen(false)}>Закрыть</button>
+                <button type="button" className="btn btn-primary" disabled={actionBusy} aria-busy={downloading} onClick={() => void download()}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" /></svg>
+                    {downloading ? 'Скачивание…' : 'Скачать'}
+                </button>
+                <button type="button" className="btn btn-outline-secondary" onClick={() => setOpen(false)}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
+                    Закрыть
+                </button>
+                {canDelete && onDelete && <button type="button" className="material-preview-delete" disabled={actionBusy} aria-busy={deleting || removing} onClick={() => void remove()}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" /></svg>
+                    {deleting || removing ? 'Удаление…' : 'Удалить'}
+                </button>}
             </div>
         </dialog>
     </div>;
