@@ -1,23 +1,14 @@
 import type { Catalog, CategoryGroup, IncidentKind } from '../api/types';
 import { fromApiKind } from '../api/incidentKind';
-
-interface Props {
-    groups: CategoryGroup[] | undefined;
-    value: IncidentKind | null | undefined;
-    disabled?: boolean;
-    error?: string;
-    onChange: (kind: IncidentKind) => void;
-}
+interface Props { groups: CategoryGroup[] | undefined; value: IncidentKind | null | undefined; disabled?: boolean; error?: string; onChange: (kind: IncidentKind) => void }
 export function EventTypeSelector({ groups, value, disabled, error, onChange }: Props) {
     const options = Array.isArray(groups) ? [...groups].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'ru')) : [];
-    return <fieldset className="kind-field" disabled={disabled}>
-        <legend>Тип события</legend>
+    return <fieldset className="kind-field" disabled={disabled} aria-label="Тип события">
         <div className="kind-switch" style={{ display: 'flex', flexWrap: 'wrap' }}>
             {options.map((group) => {
                 const kind = fromApiKind(group.code);
                 const selected = kind !== null && value === kind;
-                return <button key={group.id} type="button" className={selected ? 'active' : ''} aria-pressed={selected}
-                    disabled={kind === null} style={{ flex: '1 1 120px' }}
+                return <button key={group.id} type="button" className={selected ? 'active' : ''} aria-pressed={selected} disabled={kind === null} style={{ flex: '1 1 120px' }}
                     title={kind === null ? `Код группы ${group.code} не поддерживается контрактом IncidentKind` : undefined}
                     onClick={() => { if (kind !== null) onChange(kind); }}>{kind === 'notice' ? 'Событие' : group.name}</button>;
             })}

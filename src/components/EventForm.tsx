@@ -7,32 +7,19 @@ import type { Catalog, IncidentKind, IncidentSeverity } from '../api/types';
 import { fromApiKind } from '../api/incidentKind';
 import { CheckpointSelect } from './CheckpointSelect';
 import { EventTypeSelector } from './EventTypeSelector';
-
-const schema = z.object({
-    kind: z.enum(['notice', 'incident']), siteName: z.string(),
-    eventTime: z.string().min(1, 'Укажите время'),
-    comment: z.string().trim().min(1, 'Комментарий обязателен').max(10_000),
-    checkpoint: z.string().optional(),
-});
+import './CreateEventCard.css';
+const schema = z.object({ kind: z.enum(['notice', 'incident']), siteName: z.string(), eventTime: z.string().min(1, 'Укажите время'),
+    comment: z.string().trim().min(1, 'Комментарий обязателен').max(10_000), checkpoint: z.string().optional() });
 export type EventFormValues = z.infer<typeof schema>;
 interface Props {
     initial: { kind: IncidentKind | null; siteName: string; eventTime: string; comment: string; checkpoint: string };
-    severity: IncidentSeverity;
-    categoryNames?: string[];
-    catalog: Catalog | undefined;
-    disabled: boolean;
-    saving: boolean;
-    onSave: (values: EventFormValues) => void;
+    severity: IncidentSeverity; categoryNames?: string[]; catalog: Catalog | undefined; disabled: boolean; saving: boolean; onSave: (values: EventFormValues) => void;
 }
 export function EventForm({ initial, severity, categoryNames = [], catalog, disabled, saving, onSave }: Props) {
     const [categoryOverride, setCategoryOverride] = useState<string | null>(null);
     const { register, handleSubmit, watch, setValue, setError, clearErrors, formState: { errors, isDirty } } = useForm<EventFormValues>({
-        resolver: zodResolver(schema), defaultValues: {
-            kind: initial.kind ?? undefined, siteName: initial.siteName,
-            eventTime: formatInTimeZone(initial.eventTime, 'Europe/Moscow', "yyyy-MM-dd'T'HH:mm:ss"),
-            comment: initial.comment, checkpoint: initial.checkpoint,
-        },
-    });
+        resolver: zodResolver(schema), defaultValues: { kind: initial.kind ?? undefined, siteName: initial.siteName,
+            eventTime: formatInTimeZone(initial.eventTime, 'Europe/Moscow', "yyyy-MM-dd'T'HH:mm:ss"), comment: initial.comment, checkpoint: initial.checkpoint } });
     const kind = watch('kind');
     const checkpoint = watch('checkpoint') ?? '';
     const comment = watch('comment') ?? '';
@@ -45,7 +32,8 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
     const initialItem = items.find((item) => item.code === initial.checkpoint);
     const savedCategory = availableCategories.find((item) => item.id === initialItem?.categoryId)
         ?? (categoryNames.length === 1 ? availableCategories.find((item) => item.name === categoryNames[0]) : undefined);
-    const categoryId = categoryOverride ?? savedCategory?.id ?? '';
+    const defaultCategory = !initial.checkpoint && !categoryNames.length ? availableCategories.find((item) => item.name === 'Биобезопасность') : undefined;
+    const categoryId = categoryOverride ?? savedCategory?.id ?? defaultCategory?.id ?? '';
     const availableItems = categoryId ? items.filter((item) => item.categoryId === categoryId) : [];
     const locked = disabled || saving;
     return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((values) => {
@@ -58,11 +46,17 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
         onSave({ ...values, eventTime: date.toISOString() });
     })}>
         <EventTypeSelector groups={groups} value={kind} disabled={locked} error={errors.kind ? 'Выберите тип события из справочника.' : undefined} onChange={(value) => {
-            if (value !== kind) { setCategoryOverride(''); setValue('checkpoint', '', { shouldDirty: true }); clearErrors('checkpoint'); }
+            if (value !== kind) { setCategoryOverride(null); setValue('checkpoint', '', { shouldDirty: true }); clearErrors('checkpoint'); }
             setValue('kind', value, { shouldDirty: true, shouldValidate: true });
         }} />
         <fieldset disabled={locked}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
+            <div className="field-block"><label htmlFor="event-severity">Критичность</label>
+                <select id="event-severity" className="form-control" value={severity ?? 'MEDIUM'} disabled aria-describedby="event-severity-note">
+                    <option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option>
+                </select>
+                <small id="event-severity-note" className="subtle">Изменение критичности пока не поддерживается API.</small>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12 }}>
                 <div className="field-block" style={{ minWidth: 0 }}><label htmlFor="event-site">Площадка</label>
                     <select id="event-site" className="form-control" style={{ width: '100%', minWidth: 0 }} value={initial.siteName} disabled aria-describedby="event-site-note">
                         <option value="">Не указана</option>
@@ -76,18 +70,13 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
                     {errors.eventTime && <small className="invalid-feedback d-block">{errors.eventTime.message}</small>}
                 </div>
             </div>
-            <div className="field-block"><label htmlFor="event-severity">Критичность</label>
-                <select id="event-severity" className="form-control" value={severity ?? ''} disabled aria-describedby="event-severity-note">
-                    <option value="">Не указана</option><option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option>
-                </select>
-                <small id="event-severity-note" className="subtle">Изменение критичности пока не поддерживается API.</small>
-            </div>
-            <div className="field-block"><label htmlFor="event-category">Категория</label>
-                <select id="event-category" className="form-control" value={categoryId} disabled={!group || !availableCategories.length} aria-describedby="event-category-note" onChange={(event) => {
-                    setCategoryOverride(event.target.value); setValue('checkpoint', '', { shouldDirty: true }); clearErrors('checkpoint');
-                }}>
-                    <option value="">Не выбрана</option>{availableCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
+            <div className="field-block"><span id="event-category-label" className="create-field-label">Категория</span>
+                <div className="create-choice-grid" role="group" aria-labelledby="event-category-label" aria-describedby="event-category-note">
+                    {availableCategories.map((item) => <button key={item.id} type="button" className={categoryId === item.id ? 'active' : ''} aria-pressed={categoryId === item.id} onClick={() => {
+                        if (categoryId !== item.id) { setCategoryOverride(item.id); setValue('checkpoint', '', { shouldDirty: true }); clearErrors('checkpoint'); }
+                    }}>{item.name}</button>)}
+                </div>
+                {!availableCategories.length && <small className="subtle">Категории выбранного типа пока недоступны.</small>}
                 <small id="event-category-note" className="subtle">Фильтр контрольных точек, а не изменение сохранённой категории. Сохранено: {categoryNames.join(' · ') || 'не указано'}.</small>
             </div>
             <div className="field-block"><label htmlFor="event-checkpoint">Контрольная точка (при наличии)</label>

@@ -9,7 +9,6 @@ import type { Catalog, IncidentKind, IncidentSeverity, IncidentSummary } from '.
 import { CheckpointSelect } from './CheckpointSelect';
 import { EventTypeSelector } from './EventTypeSelector';
 import './CreateEventCard.css';
-
 interface Props { catalog: Catalog | undefined; onCreated: (incident: IncidentSummary) => void; onCancel: () => void }
 export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
     const qc = useQueryClient();
@@ -42,7 +41,7 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
         window.addEventListener('beforeunload', warn);
         return () => window.removeEventListener('beforeunload', warn);
     }, [dirty, pending]);
-    function cancel() { if (!pending && (!dirty || window.confirm('Закрыть форму? Несохранённые данные будут потеряны.'))) onCancel(); }
+    function cancel() { if (!pending && (!dirty || window.confirm('Закрыть форму? Несохранённые данные будут потеряны.'))) onCancelCancel(); }
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (pending) return;
@@ -56,13 +55,9 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
         if (checklistItemId && !selectedItem) { setError('Контрольная точка не принадлежит выбранной категории. Выберите её заново.'); return; }
         setError('');
         try {
-            const created = await mutation.mutateAsync({
-                source: 'manual', creationMode: 'MANUAL', eventTime: eventTime.toISOString(), severity, comment: comment.trim(),
-                metadata: { kind, siteName: site.trim(), checkpoint: selectedItem?.code ?? '',
-                    checklistItemId: selectedItem?.id, checklistItemName: selectedItem?.name,
-                    directionId: group.id, directionName: group.name,
-                    categoryId: category?.id, categoryName: category?.name },
-            });
+            const created = await mutation.mutateAsync({ source: 'manual', creationMode: 'MANUAL', eventTime: eventTime.toISOString(), severity, comment: comment.trim(),
+                metadata: { kind, siteName: site.trim(), checkpoint: selectedItem?.code ?? '', checklistItemId: selectedItem?.id, checklistItemName: selectedItem?.name,
+                    directionId: group.id, directionName: group.name, categoryId: category?.id, categoryName: category?.name } });
             void qc.invalidateQueries({ queryKey: ['incidents'] });
             toast.success('Событие создано'); onCreated(created);
         } catch (cause: unknown) {
@@ -80,11 +75,15 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
         <form id="create-event-form" className="card-scroll" onSubmit={submit} onChange={() => setDirty(true)}>
             <div className="create-source-strip"><span>Ручная регистрация</span><span>{dirty ? 'Есть несохранённые изменения' : 'Заполните данные события'}</span></div>
             <EventTypeSelector groups={groups} value={kind} disabled={pending} onChange={(value) => {
-                if (value !== kind) { setCategoryId(''); setChecklistItemId(''); }
-                setKind(value); setDirty(true);
+                if (value !== kind) { setCategoryId(''); setChecklistItemId(''); } setKind(value); setDirty(true);
             }} />
             <fieldset disabled={pending}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
+                <div className="field-block"><label htmlFor="create-severity">Критичность</label>
+                    <select id="create-severity" className="form-control" value={severity} onChange={(event) => setSeverity(event.target.value as IncidentSeverity)}>
+                        <option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option>
+                    </select>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12 }}>
                     <div className="field-block" style={{ minWidth: 0 }}><label htmlFor="create-site">Площадка</label>
                         <select id="create-site" className="form-control" style={{ width: '100%', minWidth: 0 }} value={site} required autoFocus disabled={!facilities.length} onChange={(event) => setSite(event.target.value)}>
                             <option value="">Не выбрана</option>{facilities.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
@@ -95,15 +94,12 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
                         <input id="create-time" className="form-control" style={{ width: '100%', minWidth: 0 }} type="datetime-local" step="1" required value={time} onChange={(event) => setTime(event.target.value)} />
                     </div>
                 </div>
-                <div className="field-block"><label htmlFor="create-severity">Критичность</label>
-                    <select id="create-severity" className="form-control" value={severity} onChange={(event) => setSeverity(event.target.value as IncidentSeverity)}>
-                        <option value="LOW">Низкая</option><option value="MEDIUM">Средняя</option><option value="HIGH">Высокая</option><option value="CRITICAL">Критическая</option>
-                    </select>
-                </div>
-                <div className="field-block"><label htmlFor="create-category">Категория</label>
-                    <select id="create-category" className="form-control" value={categoryId} disabled={!group} onChange={(event) => { setCategoryId(event.target.value); setChecklistItemId(''); setDirty(true); }}>
-                        <option value="">Не выбрана</option>{availableCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
+                <div className="field-block"><span id="create-category-label" className="create-field-label">Категория</span>
+                    <div className="create-choice-grid" role="group" aria-labelledby="create-category-label">
+                        {availableCategories.map((item) => <button key={item.id} type="button" className={categoryId === item.id ? 'active' : ''} aria-pressed={categoryId === item.id} onClick={() => {
+                            if (categoryId !== item.id) { setCategoryId(item.id); setChecklistItemId(''); setDirty(true); }
+                        }}>{item.name}</button>)}
+                    </div>
                     {!group && <small className="create-catalog-note">Сначала выберите тип события.</small>}
                     {group && !availableCategories.length && <small className="create-catalog-note">Для выбранного типа категории не загружены.</small>}
                 </div>
