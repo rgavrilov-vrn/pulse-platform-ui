@@ -5,6 +5,7 @@ import type { Catalog, IncidentSummary } from '../api/types';
 import { incidentsApi } from '../api/incidents';
 import { useCancelIncident, useDeferIncident, usePublishIncident, useIncident } from '../hooks/useIncidents';
 import { StatusBadge } from './StatusBadge';
+import { SeverityBadge } from './SeverityBadge';
 import { EventForm, type EventFormValues } from './EventForm';
 import { savedCategoryNames } from './EventTypeSelector';
 import { ActionDialog } from './ActionDialog';
@@ -39,7 +40,8 @@ export function EventCard({ incident, catalog }: Props) {
     };
     return <aside className="event-card panel" aria-label="Карточка события">
         <div className="card-heading"><div><div className="card-overline"><span>СОБЫТИЕ № {current.number}</span>
-            <StatusBadge status={current.status} deferred={!!current.deferredUntil} /></div><h2>{categoryNames.join(' · ') || 'Без категории'}</h2></div></div>
+            <StatusBadge status={current.status} deferred={!!current.deferredUntil} />
+            <SeverityBadge severity={current.severity} /></div><h2>{categoryNames.join(' · ') || 'Без категории'}</h2></div></div>
         {details.isError ? <div className="card-scroll"><p role="alert">Не удалось загрузить подробности события. Сохранение недоступно, чтобы не затереть данные.</p>
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
