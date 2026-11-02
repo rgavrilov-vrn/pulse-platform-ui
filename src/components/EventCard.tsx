@@ -10,6 +10,7 @@ import { SeverityBadge } from './SeverityBadge';
 import { EventForm, type EventFormValues } from './EventForm';
 import { savedCategoryNames } from './EventTypeSelector';
 import { ActionDialog } from './ActionDialog';
+import './EventCardActions.css';
 
 interface Props { incident: IncidentSummary; catalog: Catalog | undefined }
 export function EventCard({ incident, catalog }: Props) {
@@ -41,22 +42,22 @@ export function EventCard({ incident, catalog }: Props) {
     const registered = current.createdAt && !Number.isNaN(new Date(current.createdAt).getTime())
         ? formatInTimeZone(current.createdAt, 'Europe/Moscow', 'dd.MM.yyyy HH:mm:ss') : 'Не указано';
     return <aside className="event-card panel" aria-label="Карточка события">
-        <div className="card-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}><div style={{ minWidth: 0 }}>
+        <div className="card-heading"><div style={{ minWidth: 0 }}>
             <div className="card-overline"><span>СОБЫТИЕ № {current.number}</span><StatusBadge status={current.status} /><SeverityBadge severity={current.severity} /></div>
             <h2>{categoryNames.join(' · ') || 'Без категории'}</h2>
             <div className="subtle" style={{ marginTop: 8, lineHeight: 1.5 }}>Зарегистрировано (МСК): {registered}</div>
-        </div>
-            {isDraft && <button type="button" className="cancel-button" style={{ marginLeft: 'auto', flexShrink: 0 }} disabled={!ready || saving} onClick={() => setDialog('cancel')}>Отменить регистрацию</button>}
-        </div>
+        </div></div>
         {details.isError ? <div className="card-scroll"><p role="alert">Не удалось загрузить подробности события. Сохранение недоступно, чтобы не затереть данные.</p>
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
             : <EventForm key={incident.id} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={saving} />}
-        <div className="card-actions"><div className="primary-actions">
+        <div className="card-actions event-card-actions"><div className="primary-actions">
             <button className="btn btn-primary" disabled={!ready || !isDraft || !current.kind || saving || publish.isPending} title={!current.kind ? 'Сначала выберите тип события и сохраните изменения' : undefined} onClick={() => publish.mutate(incident.id)}>
                 {current.status === 'RECORDED' ? 'Опубликовано' : 'Опубликовать'}</button>
             <button className="btn btn-outline-secondary" disabled={!ready || !isDraft || saving} type="submit" form="event-form">Сохранить</button>
-        </div></div>
+        </div>
+            {isDraft && <button type="button" className="cancel-button" disabled={!ready || saving} onClick={() => setDialog('cancel')}>Отменить регистрацию</button>}
+        </div>
         {dialog === 'cancel' && <ActionDialog title="Отменить регистрацию?" description="Запись останется в реестре со статусом «Отменено»." requireReason confirmLabel="Отменить регистрацию" onConfirm={(reason) => { cancel.mutate({ id: incident.id, reason }); setDialog(null); }} onCancel={() => setDialog(null)} />}
     </aside>;
 }
