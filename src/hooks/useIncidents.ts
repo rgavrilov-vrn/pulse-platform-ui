@@ -21,7 +21,7 @@ export function useIncident(id: string | null) {
 export function usePublishIncident() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: incidentsApi.publish,
+        mutationFn: (id: string) => incidentsApi.changeStatus(id, 'RECORDED'),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['incidents'] });
             qc.invalidateQueries({ queryKey: ['incident'] });
