@@ -18,8 +18,9 @@ export type EventFormValues = z.infer<typeof schema>;
 interface Props {
     initial: { kind: IncidentKind | null; siteName: string; eventTime: string; comment: string; checkpoint: string };
     severity: IncidentSeverity; categoryNames?: string[]; catalog: Catalog | undefined; disabled: boolean; saving: boolean; onSave: (values: EventFormValues) => void;
+    cancellationReason?: string | null;
 }
-export function EventForm({ initial, severity, categoryNames = [], catalog, disabled, saving, onSave }: Props) {
+export function EventForm({ initial, severity, categoryNames = [], catalog, disabled, saving, onSave, cancellationReason }: Props) {
     const [categoryOverride, setCategoryOverride] = useState<string | null>(null);
     const { register, handleSubmit, watch, setValue, getValues, getFieldState, setError, clearErrors, formState: { errors, isDirty } } = useForm<EventFormValues>({
         resolver: zodResolver(schema), defaultValues: { kind: initial.kind ?? undefined, siteName: initial.siteName,
@@ -107,6 +108,11 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
                 {errors.comment && <small className="invalid-feedback d-block">{errors.comment.message}</small>}
             </div>
         </fieldset>
+        {cancellationReason !== undefined && <div className="field-block">
+            <label htmlFor="event-cancellation-reason">Причина отмены</label>
+            <textarea id="event-cancellation-reason" className="form-control" rows={3} readOnly
+                value={cancellationReason?.trim() ? cancellationReason : 'Причина отмены не указана'} />
+        </div>}
         <button type="submit" hidden disabled={locked || !isDirty} />
     </form>;
 }
