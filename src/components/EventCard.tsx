@@ -10,6 +10,7 @@ import { SeverityBadge } from './SeverityBadge';
 import { EventForm, type EventFormValues } from './EventForm';
 import { savedCategoryNames } from './EventTypeSelector';
 import { ActionDialog } from './ActionDialog';
+import { IncidentMaterials } from './IncidentMaterials';
 import './EventCardActions.css';
 
 interface Props { incident: IncidentSummary; catalog: Catalog | undefined }
@@ -20,6 +21,8 @@ export function EventCard({ incident, catalog }: Props) {
     const cancel = useCancelIncident();
     const [dialog, setDialog] = useState<null | 'cancel'>(null);
     const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const busy = saving || uploading || publish.isPending || cancel.isPending;
     const current = details.data ?? incident;
     const categoryNames = savedCategoryNames(current, catalog);
     const isDraft = current.status === 'DRAFT';
@@ -28,7 +31,7 @@ export function EventCard({ incident, catalog }: Props) {
     const checkpoint = typeof details.data?.checkpoint === 'string' ? details.data.checkpoint : typeof metadataCheckpoint === 'string' ? metadataCheckpoint : '';
     const initial = { kind: current.kind, siteName: current.siteName ?? '', eventTime: current.eventTime, comment: current.comment ?? '', checkpoint };
     const onSave = async (values: EventFormValues) => {
-        if (!ready) return;
+        if (!ready || !isDraft || busy) return;
         setSaving(true);
         try {
             await incidentsApi.update(incident.id, { kind: values.kind, eventTime: values.eventTime, comment: values.comment,
@@ -50,14 +53,17 @@ export function EventCard({ incident, catalog }: Props) {
         {details.isError ? <div className="card-scroll"><p role="alert">Не удалось загрузить подробности события. Сохранение недоступно, чтобы не затереть данные.</p>
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
-            : <EventForm key={incident.id} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={saving} cancellationReason={current.status === 'CANCELLED' ? details.data?.cancellationReason ?? null : undefined} />}
+            : <div className="card-scroll event-details-scroll">
+                <EventForm key={incident.id} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={busy} cancellationReason={current.status === 'CANCELLED' ? details.data?.cancellationReason ?? null : undefined} />
+                <IncidentMaterials key={incident.id} incidentId={incident.id} canUpload={isDraft && !saving && !publish.isPending && !cancel.isPending} onUploadingChange={setUploading} />
+            </div>}
         {current.status !== 'CANCELLED' && <div className="card-actions event-card-actions"><div className="primary-actions">
-            {isDraft && <button className="btn btn-primary" disabled={!ready || !current.kind || saving || publish.isPending} title={!current.kind ? 'Сначала выберите тип события и сохраните изменения' : undefined} onClick={() => publish.mutate(incident.id)}>
+            {isDraft && <button className="btn btn-primary" disabled={!ready || !current.kind || busy} title={!current.kind ? 'Сначала выберите тип события и сохраните изменения' : undefined} onClick={() => publish.mutate(incident.id)}>
                 Опубликовать</button>}
-            <button className="btn btn-outline-secondary" disabled={!ready || !isDraft || saving} type="submit" form="event-form">Сохранить</button>
+            <button className="btn btn-outline-secondary" disabled={!ready || !isDraft || busy} type="submit" form="event-form">Сохранить</button>
         </div>
-            {isDraft && <button type="button" className="cancel-button" disabled={!ready || saving} onClick={() => setDialog('cancel')}>Отменить регистрацию</button>}
+            {isDraft && <button type="button" className="cancel-button" disabled={!ready || busy} onClick={() => setDialog('cancel')}>Отменить регистрацию</button>}
         </div>}
-        {isDraft && dialog === 'cancel' && <ActionDialog title="Отменить регистрацию?" description="Запись останется в реестре со статусом «Отменено»." requireReason confirmLabel="Отменить регистрацию" onConfirm={(reason) => { cancel.mutate({ id: incident.id, reason }); setDialog(null); }} onCancel={() => setDialog(null)} />}
+        {isDraft && dialog === 'cancel' && <ActionDialog title="Отменить регистрацию?" description="Запись останется в реестре со статусом «Отменено»." requireReason confirmLabel="Отменить регистрацию" onConfirm={(reason) => { if (busy) return; cancel.mutate({ id: incident.id, reason }); setDialog(null); }} onCancel={() => setDialog(null)} />}
     </aside>;
 }
