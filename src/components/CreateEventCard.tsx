@@ -16,7 +16,6 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
     const [kind, setKind] = useState<IncidentKind>('incident');
     const [site, setSite] = useState('');
     const [time, setTime] = useState(() => formatInTimeZone(new Date(), 'Europe/Moscow', "yyyy-MM-dd'T'HH:mm:ss"));
-    const [checkpoint, setCheckpoint] = useState('');
     const [comment, setComment] = useState('');
     const [severity, setSeverity] = useState<IncidentSeverity>('MEDIUM');
     const [categoryId, setCategoryId] = useState('');
@@ -51,6 +50,7 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
         if (pending) return;
         if (!kind || !selectedGroup) { setError('Выберите тип события из справочника.'); return; }
         if (!site.trim() || !comment.trim()) { setError('Укажите площадку и комментарий.'); return; }
+        if (!facilities.some((item) => item.name === site)) { setError('Выберите площадку из справочника.'); return; }
         const eventTime = fromZonedTime(time, 'Europe/Moscow');
         if (Number.isNaN(eventTime.getTime())) { setError('Укажите корректное время события.'); return; }
         const category = availableCategories.find((item) => item.id === categoryId);
@@ -106,8 +106,12 @@ export function CreateEventCard({ catalog, onCreated, onCancel }: Props) {
                     {categoryId && !availableChecklistItems.length && <small className="create-catalog-note">Для выбранной категории контрольные точки не загружены.</small>}
                 </div>
                 <div className="field-block"><label htmlFor="create-site">Площадка</label>
-                    <input id="create-site" className="form-control" list="create-sites" value={site} required autoFocus onChange={(e) => setSite(e.target.value)} />
-                    <datalist id="create-sites">{facilities.map((item) => <option key={item.id} value={item.name} />)}</datalist></div>
+                    <select id="create-site" className="form-control" value={site} required autoFocus disabled={!facilities.length} onChange={(e) => setSite(e.target.value)}>
+                        <option value="">Не выбрана</option>
+                        {facilities.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                    </select>
+                    {!facilities.length && <small className="create-catalog-note">Справочник площадок пока недоступен.</small>}
+                </div>
                 <div className="time-fields"><div className="field-block"><label htmlFor="create-time">Время события (МСК)</label>
                     <input id="create-time" className="form-control" type="datetime-local" step="1" required value={time} onChange={(e) => setTime(e.target.value)} /></div>
                     <div className="field-block"><label>Зарегистрировано</label><div className="readonly-value">Будет назначено сервером</div></div></div>
