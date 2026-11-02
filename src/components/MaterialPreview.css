@@ -18,13 +18,15 @@
 .material-preview-content p { color: var(--muted); font-size: 12px; line-height: 1.6; }
 .material-preview-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .material-preview-actions > button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; min-height: 38px; padding: 8px 14px; border-radius: 6px; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.4; white-space: nowrap; box-sizing: border-box; }
+.material-preview-actions > .btn-primary { order: 1; }
+.material-preview-actions > .btn-outline-secondary { order: 3; margin-left: auto; }
 .material-preview-actions svg { flex-shrink: 0; }
-.material-preview-actions > .material-preview-delete { --delete-fg: #a52a25; --delete-border: #d9948e; --delete-bg: #fff5f3; --delete-hover: #fbe4df; margin-left: auto; border: 1px solid var(--delete-border); background: var(--delete-bg); color: var(--delete-fg); cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
+.material-preview-actions > .material-preview-delete { order: 2; --delete-fg: #a52a25; --delete-border: #d9948e; --delete-bg: #fff5f3; --delete-hover: #fbe4df; border: 1px solid var(--delete-border); background: var(--delete-bg); color: var(--delete-fg); cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
 .material-preview-actions > .material-preview-delete:hover:not(:disabled) { background: var(--delete-hover); border-color: var(--delete-fg); }
 .material-preview-actions > .material-preview-delete:active:not(:disabled) { background: var(--delete-hover); border-color: var(--delete-fg); box-shadow: inset 0 1px 2px rgb(0 0 0 / .12); }
 .material-preview-actions > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .material-preview-actions > .material-preview-delete:focus-visible { outline-color: var(--delete-fg); }
 .material-preview-actions > button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 [data-bs-theme=dark] .material-preview-actions > .material-preview-delete { --delete-fg: #ffb4ab; --delete-border: #985b54; --delete-bg: #482d28; --delete-hover: #603832; }
-@media (max-width: 480px) { .material-preview-actions > button { flex: 1 1 auto; } .material-preview-actions > .material-preview-delete { margin-left: 0; } }
+@media (max-width: 480px) { .material-preview-actions > button { flex: 1 1 auto; } .material-preview-actions > .btn-outline-secondary { margin-left: 0; } }
 @media (prefers-reduced-motion: reduce) { .material-preview-actions > .material-preview-delete { transition: none; } }
