@@ -32,21 +32,6 @@ export function usePublishIncident() {
     });
 }
 
-export function useDeferIncident() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-            incidentsApi.defer(id, {
-                until: new Date(Date.now() + 30 * 60_000).toISOString(),
-                reason,
-            }),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['incidents'] });
-            toast.success('Отложено на 30 минут');
-        },
-    });
-}
-
 export function useCancelIncident() {
     const qc = useQueryClient();
     return useMutation({

@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Catalog, IncidentSummary } from '../api/types';
 import { incidentsApi } from '../api/incidents';
-import { useCancelIncident, useDeferIncident, usePublishIncident, useIncident } from '../hooks/useIncidents';
+import { useCancelIncident, usePublishIncident, useIncident } from '../hooks/useIncidents';
 import { StatusBadge } from './StatusBadge';
 import { SeverityBadge } from './SeverityBadge';
 import { EventForm, type EventFormValues } from './EventForm';
@@ -16,9 +16,8 @@ export function EventCard({ incident, catalog }: Props) {
     const qc = useQueryClient();
     const details = useIncident(incident.id);
     const publish = usePublishIncident();
-    const defer = useDeferIncident();
     const cancel = useCancelIncident();
-    const [dialog, setDialog] = useState<null | 'defer' | 'cancel'>(null);
+    const [dialog, setDialog] = useState<null | 'cancel'>(null);
     const [saving, setSaving] = useState(false);
     const current = details.data ?? incident;
     const categoryNames = savedCategoryNames(current, catalog);
@@ -43,7 +42,7 @@ export function EventCard({ incident, catalog }: Props) {
         ? formatInTimeZone(current.createdAt, 'Europe/Moscow', 'dd.MM.yyyy HH:mm:ss') : 'Не указано';
     return <aside className="event-card panel" aria-label="Карточка события">
         <div className="card-heading"><div style={{ minWidth: 0 }}>
-            <div className="card-overline"><span>СОБЫТИЕ № {current.number}</span><StatusBadge status={current.status} deferred={!!current.deferredUntil} /><SeverityBadge severity={current.severity} /></div>
+            <div className="card-overline"><span>СОБЫТИЕ № {current.number}</span><StatusBadge status={current.status} /><SeverityBadge severity={current.severity} /></div>
             <h2>{categoryNames.join(' · ') || 'Без категории'}</h2>
             <div className="subtle" style={{ marginTop: 8, lineHeight: 1.5 }}>Зарегистрировано (МСК): {registered}</div>
         </div></div>
@@ -55,9 +54,7 @@ export function EventCard({ incident, catalog }: Props) {
             <button className="btn btn-primary" disabled={!ready || !isDraft || !current.kind || saving || publish.isPending} title={!current.kind ? 'Сначала выберите тип события и сохраните изменения' : undefined} onClick={() => publish.mutate(incident.id)}>
                 {current.status === 'RECORDED' ? 'Опубликовано' : 'Опубликовать'}</button>
             <button className="btn btn-outline-secondary" disabled={!ready || !isDraft || saving} type="submit" form="event-form">Сохранить</button>
-            <button className="icon-btn postpone" disabled={!ready || !isDraft || saving} onClick={() => setDialog('defer')} title="Отложить на 30 минут">⏱</button>
         </div>{isDraft && <button className="cancel-button" disabled={!ready || saving} onClick={() => setDialog('cancel')}>Отменить регистрацию</button>}</div>
-        {dialog === 'defer' && <ActionDialog title="Отложить на 30 минут?" description="Событие перейдёт в очередь «Отложено»." requireReason confirmLabel="Отложить" onConfirm={(reason) => { defer.mutate({ id: incident.id, reason }); setDialog(null); }} onCancel={() => setDialog(null)} />}
         {dialog === 'cancel' && <ActionDialog title="Отменить регистрацию?" description="Запись останется в реестре со статусом «Отменено»." requireReason confirmLabel="Отменить регистрацию" onConfirm={(reason) => { cancel.mutate({ id: incident.id, reason }); setDialog(null); }} onCancel={() => setDialog(null)} />}
     </aside>;
 }

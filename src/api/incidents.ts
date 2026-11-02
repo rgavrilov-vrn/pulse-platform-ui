@@ -9,7 +9,6 @@ export interface ListParams {
     kind?: IncidentKind;
     search?: string;
     mineOnly?: boolean;
-    deferred?: boolean;
     eventFrom?: string;
     eventTo?: string;
     sort?: string;
@@ -44,7 +43,6 @@ export const incidentsApi = {
                 kind: p.kind === undefined ? undefined : toApiKind(p.kind),
                 search: p.search,
                 mineOnly: p.mineOnly,
-                deferred: p.deferred,
                 eventFrom: p.eventFrom,
                 eventTo: p.eventTo,
             },
@@ -69,10 +67,6 @@ export const incidentsApi = {
 
     publish: (id: string) =>
         api.post<ApiIncident<IncidentDetails>>(`/api/v1/incidents/${id}/publish`)
-            .then((r) => fromApiIncident<IncidentDetails>(r.data)),
-
-    defer: (id: string, body: { until: string; reason: string }) =>
-        api.patch<ApiIncident<IncidentDetails>>(`/api/v1/incidents/${id}/defer`, body)
             .then((r) => fromApiIncident<IncidentDetails>(r.data)),
 
     changeStatus: (id: string, toStatus: IncidentStatus, comment?: string) =>

@@ -3,7 +3,7 @@ import type { IncidentSummary } from '../api/types';
 import { moscowTime, moscowDate, relative } from '../utils/format';
 import { StatusBadge } from './StatusBadge';
 
-export type Filter = 'all' | 'draft' | 'deferred' | 'published' | 'cancelled';
+export type Filter = 'all' | 'draft' | 'published' | 'cancelled';
 
 interface Props {
     rows: IncidentSummary[];
@@ -22,7 +22,6 @@ interface Props {
 const FILTERS: { id: Filter; label: string }[] = [
     { id: 'all', label: 'Все' },
     { id: 'draft', label: 'Черновики' },
-    { id: 'deferred', label: 'Отложено' },
     { id: 'published', label: 'Опубликовано' },
     { id: 'cancelled', label: 'Отменено' },
 ];
@@ -117,7 +116,7 @@ export function EventTable(p: Props) {
                                 <div className="event-summary">{e.comment ?? ''}</div>
                             </td>
                             <td>
-                                <StatusBadge status={e.status} deferred={!!e.deferredUntil} />
+                                <StatusBadge status={e.status} />
                                 <div className="record-author">{e.authorName ?? '—'}</div>
                             </td>
                         </tr>

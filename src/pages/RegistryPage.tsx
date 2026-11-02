@@ -34,12 +34,11 @@ export function RegistryPage() {
         kind: undefined,
         search: debounced || undefined,
         mineOnly,
-        deferred: filter === 'deferred' ? true : undefined,
         size: 100,
     });
     const catalog = useCatalog();
     const selected = created?.id === selectedId ? created : list.data?.content.find((i) => i.id === selectedId) ?? list.data?.content[0];
-    const draftsCount = list.data?.content.filter((i) => i.status === 'DRAFT' && !i.deferredUntil).length ?? 0;
+    const draftsCount = list.data?.content.filter((i) => i.status === 'DRAFT').length ?? 0;
     const incidentsCount = list.data?.content.filter((i) => i.kind === 'incident').length ?? 0;
     const myPublished = list.data?.content.filter((i) => i.status === 'RECORDED').length ?? 0;
 

@@ -22,14 +22,6 @@ const CLASS: Record<IncidentStatus, string> = {
     ARCHIVED: 'cancelled',
 };
 
-export function StatusBadge({
-                                status,
-                                deferred,
-                            }: {
-    status: IncidentStatus;
-    deferred?: boolean;
-}) {
-    const label = deferred ? 'Отложено' : LABELS[status];
-    const cls = deferred ? 'deferred' : CLASS[status];
-    return <span className={`status-badge ${cls}`}>{label}</span>;
+export function StatusBadge({ status }: { status: IncidentStatus }) {
+    return <span className={`status-badge ${CLASS[status]}`}>{LABELS[status]}</span>;
 }

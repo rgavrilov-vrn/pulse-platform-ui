@@ -29,7 +29,6 @@ export interface IncidentSummary {
     eventTime: string;
     createdAt: string;
     updatedAt: string;
-    deferredUntil: string | null;
     assignedToName: string | null;
     authorName: string | null;
     siteName: string | null;
@@ -50,7 +49,6 @@ export interface IncidentDetails extends IncidentSummary {
     checkpoint: string | null;
     cameraId: string | null;
     cameraName: string | null;
-    deferReason: string | null;
     cancellationReason: string | null;
     metadata: Record<string, unknown>;
     materials: Material[];
