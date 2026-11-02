@@ -5,6 +5,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
     overflow-x: auto;
 }
 .event-card .event-card-actions > .primary-actions {
@@ -15,10 +17,15 @@
     justify-content: flex-start;
     gap: 8px;
     flex: 0 0 auto;
+    margin: 0;
 }
 .event-card .event-card-actions > .primary-actions > button {
     white-space: nowrap;
     flex-shrink: 0;
+    height: 38px;
+    min-height: 38px;
+    margin: 0;
+    box-sizing: border-box;
 }
 .event-card .event-card-actions > .cancel-button {
     --cancel-fg: #a52a25;
@@ -29,9 +36,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    align-self: center;
     flex: 0 0 auto;
-    margin-left: auto;
-    min-height: 36px;
+    margin: 0 0 0 auto;
+    height: 38px;
+    min-height: 38px;
+    box-sizing: border-box;
     padding: 8px 14px;
     border: 1px solid var(--cancel-border);
     border-radius: 6px;
@@ -71,6 +81,12 @@
     --cancel-bg: #482d28;
     --cancel-hover: #603832;
     --cancel-ring: #ffb4ab;
+}
+@media (min-width: 1650px) {
+    .event-card .event-card-actions {
+        padding-left: 25px;
+        padding-right: 25px;
+    }
 }
 @media (prefers-reduced-motion: reduce) {
     .event-card .event-card-actions > .cancel-button { transition: none; }
