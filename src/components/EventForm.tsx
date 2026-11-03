@@ -12,18 +12,21 @@ const severityOptions: { value: IncidentSeverity; label: string }[] = [
     { value: 'LOW', label: 'Низкая' }, { value: 'MEDIUM', label: 'Средняя' },
     { value: 'HIGH', label: 'Высокая' }, { value: 'CRITICAL', label: 'Критическая' },
 ];
-const schema = z.object({ kind: z.enum(['notice', 'incident']), categoryId: z.string().optional(), siteName: z.string(), eventTime: z.string().min(1, 'Укажите время'),
+const schema = z.object({ kind: z.enum(['notice', 'incident']), categoryId: z.string().optional(), siteName: z.string(),
+    severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']), facilityId: z.string().optional(), clearFacility: z.boolean().optional(),
+    eventTime: z.string().min(1, 'Укажите время'),
     comment: z.string().trim().min(1, 'Комментарий обязателен').max(10_000), checkpoint: z.string().optional() });
 export type EventFormValues = z.infer<typeof schema>;
 interface Props {
-    initial: { kind: IncidentKind | null; siteName: string; eventTime: string; comment: string; checkpoint: string };
+    initial: { kind: IncidentKind | null; siteName: string; facilityId?: string; eventTime: string; comment: string; checkpoint: string };
     severity: IncidentSeverity; categoryNames?: string[]; catalog: Catalog | undefined; disabled: boolean; saving: boolean; onSave: (values: EventFormValues) => void;
     cancellationReason?: string | null;
 }
 export function EventForm({ initial, severity, categoryNames = [], catalog, disabled, saving, onSave, cancellationReason }: Props) {
     const [categoryOverride, setCategoryOverride] = useState<string | null>(null);
+    const [facilityOverride, setFacilityOverride] = useState<string | null>(null);
     const { register, handleSubmit, watch, setValue, getValues, getFieldState, setError, clearErrors, formState: { errors, isDirty } } = useForm<EventFormValues>({
-        resolver: zodResolver(schema), defaultValues: { kind: initial.kind ?? undefined, siteName: initial.siteName,
+        resolver: zodResolver(schema), defaultValues: { kind: initial.kind ?? undefined, siteName: initial.siteName, severity: severity ?? 'MEDIUM',
             eventTime: formatInTimeZone(initial.eventTime, 'Europe/Moscow', "yyyy-MM-dd'T'HH:mm:ss"), comment: initial.comment, checkpoint: initial.checkpoint } });
     useEffect(() => {
         if (initial.kind && !getFieldState('kind').isDirty && getValues('kind') !== initial.kind) {
@@ -32,14 +35,21 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
         if (!getFieldState('checkpoint').isDirty && getValues('checkpoint') !== initial.checkpoint) {
             setValue('checkpoint', initial.checkpoint, { shouldDirty: false, shouldValidate: true });
         }
-    }, [initial.kind, initial.checkpoint, getFieldState, getValues, setValue]);
+        if (!getFieldState('severity').isDirty && getValues('severity') !== severity) {
+            setValue('severity', severity, { shouldDirty: false, shouldValidate: true });
+        }
+    }, [initial.kind, initial.checkpoint, severity, getFieldState, getValues, setValue]);
     const kind = watch('kind');
     const checkpoint = watch('checkpoint') ?? '';
     const comment = watch('comment') ?? '';
+    const selectedSeverity = watch('severity');
     const groups = catalog?.groups ?? [];
     const categories = catalog?.categories ?? [];
     const items = catalog?.checklistItems ?? [];
     const facilities = catalog?.facilities ?? [];
+    const namedFacilities = facilities.filter((item) => item.name === initial.siteName);
+    const savedFacilityId = initial.facilityId ?? (namedFacilities.length === 1 ? namedFacilities[0].id : undefined);
+    const facilityValue = facilityOverride ?? savedFacilityId ?? (initial.siteName ? '__unchanged__' : '');
     const group = groups.find((item) => fromApiKind(item.code) === kind);
     const availableCategories = group ? categories.filter((item) => item.groupId === group.id) : [];
     const initialItem = items.find((item) => item.code === initial.checkpoint);
@@ -56,12 +66,16 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
         if (!categoryId || !availableCategories.some((item) => item.id === categoryId)) {
             setError('categoryId', { type: 'validate', message: 'Выберите категорию выбранного типа события.' }); return;
         }
+        if (facilityOverride && !facilities.some((item) => item.id === facilityOverride)) {
+            setError('facilityId', { type: 'validate', message: 'Выберите площадку из справочника.' }); return;
+        }
         if (values.checkpoint && values.checkpoint !== initial.checkpoint && !availableItems.some((item) => item.code === values.checkpoint)) {
             setError('checkpoint', { type: 'validate', message: 'Выберите контрольную точку выбранной категории.' }); return;
         }
         const date = fromZonedTime(values.eventTime, 'Europe/Moscow');
         if (Number.isNaN(date.getTime())) { setError('eventTime', { type: 'validate', message: 'Укажите корректное время события.' }); return; }
-        onSave({ ...values, categoryId, eventTime: date.toISOString() });
+        onSave({ ...values, categoryId, eventTime: date.toISOString(),
+            ...(facilityOverride === null ? {} : facilityOverride ? { facilityId: facilityOverride } : { clearFacility: true }) });
     })}>
         <EventTypeSelector groups={groups} value={kind} disabled={locked} error={errors.kind ? 'Выберите тип события из справочника.' : undefined} onChange={(value) => {
             if (value !== kind) { setCategoryOverride(null); setValue('checkpoint', '', { shouldDirty: true }); clearErrors(['checkpoint', 'categoryId']); }
@@ -69,20 +83,26 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
         }} />
         <fieldset disabled={locked}>
             <div className="field-block">
-                <div className="create-choice-grid" role="group" aria-label="Критичность" aria-describedby="event-severity-note">
-                    {severityOptions.map((option) => <button key={option.value} type="button" disabled className={(severity ?? 'MEDIUM') === option.value ? 'active' : ''}
-                        aria-pressed={(severity ?? 'MEDIUM') === option.value}>{option.label}</button>)}
+                <div className="create-choice-grid" role="group" aria-label="Приоритет" aria-describedby="event-severity-note">
+                    {severityOptions.map((option) => <button key={option.value} type="button" className={selectedSeverity === option.value ? 'active' : ''}
+                        aria-pressed={selectedSeverity === option.value} onClick={() => setValue('severity', option.value, { shouldDirty: true, shouldValidate: true })}>{option.label}</button>)}
                 </div>
-                <small id="event-severity-note" className="subtle">Изменение критичности пока не поддерживается API.</small>
+                <small id="event-severity-note" className="subtle">Приоритет сохраняется кнопкой «Сохранить».</small>
+                {errors.severity && <small className="invalid-feedback d-block" role="alert">Выберите приоритет.</small>}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 12 }}>
                 <div className="field-block" style={{ minWidth: 0 }}><label htmlFor="event-site">Площадка</label>
-                    <select id="event-site" className="form-control" style={{ width: '100%', minWidth: 0 }} value={initial.siteName} disabled aria-describedby="event-site-note">
+                    <select id="event-site" className="form-control" style={{ width: '100%', minWidth: 0 }} value={facilityValue} disabled={!catalog}
+                        aria-describedby="event-site-note" aria-invalid={!!errors.facilityId} onChange={(event) => {
+                            setFacilityOverride(event.target.value); clearErrors('facilityId');
+                            setValue('siteName', facilities.find((item) => item.id === event.target.value)?.name ?? '', { shouldDirty: true });
+                        }}>
                         <option value="">Не указана</option>
-                        {initial.siteName && !facilities.some((item) => item.name === initial.siteName) && <option value={initial.siteName}>{initial.siteName}</option>}
-                        {facilities.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                        {facilityValue && !facilities.some((item) => item.id === facilityValue) && <option value={facilityValue} disabled>{initial.siteName || 'Текущая площадка'} (сохранена)</option>}
+                        {facilities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
-                    <small id="event-site-note" className="subtle">Изменение площадки пока не поддерживается API.</small>
+                    <small id="event-site-note" className="subtle">Площадка сохраняется кнопкой «Сохранить». «Не указана» снимает привязку. Если площадку не менять, текущая привязка сохраняется.</small>
+                    {errors.facilityId && <small className="invalid-feedback d-block" role="alert">{errors.facilityId.message}</small>}
                 </div>
                 <div className="field-block" style={{ minWidth: 0 }}><label htmlFor="event-time">Время события (МСК)</label>
                     <input id="event-time" type="datetime-local" step="1" className="form-control" style={{ width: '100%', minWidth: 0 }} {...register('eventTime')} />

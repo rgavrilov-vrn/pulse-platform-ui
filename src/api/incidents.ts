@@ -1,6 +1,6 @@
 import { api } from './client';
 import { fromApiIncident, toApiKind, type ApiIncident } from './incidentKind';
-import type { IncidentDetails, IncidentKind, IncidentStatus, IncidentSummary, Page } from './types';
+import type { IncidentDetails, IncidentKind, IncidentSeverity, IncidentStatus, IncidentSummary, Page } from './types';
 
 export interface ListParams {
     page?: number;
@@ -31,6 +31,9 @@ export interface UpdateBody {
     eventTime?: string;
     comment?: string;
     checkpoint?: string;
+    severity?: IncidentSeverity;
+    facilityId?: string;
+    clearFacility?: boolean;
 }
 
 export const incidentsApi = {

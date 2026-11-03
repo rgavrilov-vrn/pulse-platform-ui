@@ -22,6 +22,7 @@ export function EventCard({ incident, catalog }: Props) {
     const [dialog, setDialog] = useState<null | 'cancel'>(null);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [formRevision, setFormRevision] = useState(0);
     const busy = saving || uploading || publish.isPending || cancel.isPending;
     const current = details.data ?? incident;
     const categoryNames = savedCategoryNames(current, catalog);
@@ -29,17 +30,23 @@ export function EventCard({ incident, catalog }: Props) {
     const ready = !!details.data && !details.isError;
     const metadataCheckpoint = details.data?.metadata?.checkpoint;
     const checkpoint = typeof details.data?.checkpoint === 'string' ? details.data.checkpoint : typeof metadataCheckpoint === 'string' ? metadataCheckpoint : '';
-    const initial = { kind: current.kind, siteName: current.siteName ?? '', eventTime: current.eventTime, comment: current.comment ?? '', checkpoint };
+    const metadata = details.data?.metadata;
+    const facilityId = typeof metadata?.objectId === 'string' && metadata.objectId ? metadata.objectId
+        : typeof metadata?.facilityId === 'string' && metadata.facilityId ? metadata.facilityId : undefined;
+    const initial = { kind: current.kind, siteName: current.siteName ?? '', facilityId, eventTime: current.eventTime, comment: current.comment ?? '', checkpoint };
     const onSave = async (values: EventFormValues) => {
         if (!ready || !isDraft || busy) return;
         setSaving(true);
         try {
             await incidentsApi.update(incident.id, { categoryId: values.categoryId, eventTime: values.eventTime, comment: values.comment,
+                severity: values.severity,
+                ...(values.facilityId ? { facilityId: values.facilityId } : values.clearFacility ? { clearFacility: true } : {}),
                 ...(values.checkpoint && values.checkpoint !== checkpoint ? { checkpoint: values.checkpoint } : {}) });
             await Promise.all([
                 qc.invalidateQueries({ queryKey: ['incidents'] }),
                 qc.invalidateQueries({ queryKey: ['incident', incident.id] }),
             ]);
+            setFormRevision((value) => value + 1);
             toast.success('Изменения сохранены');
         } catch (error: any) { toast.error(error.response?.data?.detail ?? error.response?.data?.message ?? 'Ошибка сохранения'); }
         finally { setSaving(false); }
@@ -56,7 +63,7 @@ export function EventCard({ incident, catalog }: Props) {
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
             : <div className="card-scroll event-details-scroll">
-                <EventForm key={`${incident.id}:${current.kind}:${current.categoryName}`} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={busy} cancellationReason={current.status === 'CANCELLED' ? details.data?.cancellationReason ?? null : undefined} />
+                <EventForm key={`${incident.id}:${current.kind}:${current.categoryName}:${formRevision}`} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={busy} cancellationReason={current.status === 'CANCELLED' ? details.data?.cancellationReason ?? null : undefined} />
                 <IncidentMaterials key={incident.id} incidentId={incident.id} canUpload={isDraft && !saving && !publish.isPending && !cancel.isPending} onUploadingChange={setUploading} />
             </div>}
         {current.status !== 'CANCELLED' && <div className="card-actions event-card-actions"><div className="primary-actions">
