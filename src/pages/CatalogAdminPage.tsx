@@ -77,10 +77,15 @@ export function CatalogAdminPage() {
     function newCategory() {
         open({ type: 'category', readOnly: false, body: { ...emptyDraft(), groupId: groupId || groups.data?.[0]?.id || '' } });
     }
+    function selectCategory(c: ManagedCategory) {
+        if (busy || writing.current) return;
+        setSelectedId(c.id);
+        if (c.id !== category?.id) setPointSearch('');
+    }
     function showCategory(c: ManagedCategory) {
         if (open({ type: 'category', id: c.id, readOnly: !canManage || !c.active,
             body: { ...emptyDraft(), groupId: c.groupId, code: c.code, name: c.name, description: c.description ?? '', sortOrder: c.sortOrder } })) {
-            setSelectedId(c.id); setPointSearch('');
+            selectCategory(c);
         }
     }
     function newPoint() {
@@ -146,8 +151,20 @@ export function CatalogAdminPage() {
                     <input className="form-control" type="search" aria-label="Поиск категории" placeholder="Название или код категории" value={categorySearch} disabled={busy} onChange={e => setCategorySearch(e.target.value)} />
                     {categories.isPending && <p role="status">Загрузка категорий…</p>}
                     {!categories.isPending && !categories.isError && !visible.length && <p className="subtle">Категорий по выбранным условиям нет.</p>}
-                    <ul className="catalog-category-list">{visible.map(c => <li key={c.id} className={`${c.id === category?.id ? 'is-selected' : ''} ${!c.active ? 'is-deleted' : ''}`}>
-                        <button type="button" className="catalog-name-button catalog-category-select" disabled={busy} aria-label={`Открыть категорию «${c.name}»`} onClick={() => showCategory(c)}><span>{c.name}</span><small>{groupName(c.groupId)} · {c.code}{!c.active ? ' · Удалена' : ''}</small></button>
+                    <ul className="catalog-category-list">{visible.map(c => <li key={c.id}
+                        className={`${c.id === category?.id ? 'is-selected' : ''} ${!c.active ? 'is-deleted' : ''}`}
+                        tabIndex={busy ? -1 : 0} aria-current={c.id === category?.id ? 'true' : undefined}
+                        aria-label={`Показать контрольные точки категории «${c.name}»`}
+                        style={{ cursor: busy ? 'not-allowed' : 'pointer' }} onClick={() => selectCategory(c)}
+                        onKeyDown={event => {
+                            if (event.target !== event.currentTarget) return;
+                            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectCategory(c); }
+                        }}>
+                        <div className="catalog-category-select">
+                            <button type="button" className="catalog-name-button" disabled={busy} aria-label={`Открыть категорию «${c.name}»`}
+                                onClick={event => { event.stopPropagation(); showCategory(c); }}><span style={{ fontWeight: 600 }}>{c.name}</span></button>
+                            <small className="subtle" style={{ display: 'block', marginTop: 5 }}>{groupName(c.groupId)} · {c.code}{!c.active ? ' · Удалена' : ''}</small>
+                        </div>
                         {canManage && c.active && <TrashButton name={c.name} disabled={busy || !loaded} onClick={() => setDeleting({ type: 'category', row: c })} />}
                     </li>)}</ul>
                 </section>
@@ -162,7 +179,7 @@ export function CatalogAdminPage() {
                         </tbody></table></div></>}
                 </section>
             </div>
-            <p className="subtle catalog-note">Удаление мягкое: события и их связи сохраняются. При удалении категории деактивируются все её активные точки. Нажмите название, чтобы открыть карточку.</p>
+            <p className="subtle catalog-note">Нажмите строку категории, чтобы показать её контрольные точки; нажмите название, чтобы также открыть карточку. Удаление мягкое: события и их связи сохраняются. При удалении категории деактивируются все её активные точки.</p>
         </>}
         {editor && <CatalogCard title={cardTitle} busy={busy} onClose={closeEditor} footer={<>
             {editable && <button className="btn btn-primary" type="submit" form="catalog-editor-form" disabled={busy}>{busy ? 'Сохранение…' : 'Сохранить'}</button>}
