@@ -27,8 +27,9 @@ export function EventCard({ incident, catalog }: Props) {
     const [formRevision, setFormRevision] = useState(0);
     const [pending, setPending] = useState<PendingCategoryChange | null>(null);
     const [needsRefresh, setNeedsRefresh] = useState(false);
+    const [preferredCheckpoint, setPreferredCheckpoint] = useState<{ incidentId: string; itemId: string } | null>(null);
     const writing = useRef(false);
-    useEffect(() => { setPending(null); setDialog(null); setNeedsRefresh(false); }, [incident.id]);
+    useEffect(() => { setPending(null); setDialog(null); setNeedsRefresh(false); setPreferredCheckpoint(null); }, [incident.id]);
     const confirmation = pending?.incidentId === incident.id ? pending : null;
     const operationBusy = saving || uploading || publish.isPending || cancel.isPending;
     const busy = operationBusy || !!confirmation || needsRefresh;
@@ -42,11 +43,13 @@ export function EventCard({ incident, catalog }: Props) {
         : typeof metadataCheckpoint === 'string' ? metadataCheckpoint : '';
     const savedCheckpoints = (details.data?.checkpoints ?? []).map(link => {
         const item = catalog?.checklistItems.find(item => item.id === link.checklistItemId);
-        return { id: link.id, name: link.itemName || item?.name || link.checklistItemId, code: item?.code ?? `saved:${link.id}` };
+        return { id: link.id, itemId: link.checklistItemId, name: link.itemName || item?.name || link.checklistItemId, code: item?.code ?? `saved:${link.id}` };
     });
-    const checkpoint = savedCheckpoints.length === 1 ? savedCheckpoints[0].code : savedCheckpoints.length > 1 ? '' : legacyCheckpoint;
-    const checkpointLabel = savedCheckpoints.length === 1 ? savedCheckpoints[0].name
-        : typeof metadata?.checklistItemName === 'string' ? metadata.checklistItemName : undefined;
+    const preferredItemId = preferredCheckpoint?.incidentId === incident.id ? preferredCheckpoint.itemId : undefined;
+    const selectedCheckpoint = savedCheckpoints.find(point => point.itemId === preferredItemId) ?? savedCheckpoints[0];
+    const checkpoint = selectedCheckpoint?.code ?? legacyCheckpoint;
+    const checkpointLabel = selectedCheckpoint?.name
+        ?? (typeof metadata?.checklistItemName === 'string' ? metadata.checklistItemName : undefined);
     const facilityId = typeof metadata?.objectId === 'string' && metadata.objectId ? metadata.objectId
         : typeof metadata?.facilityId === 'string' && metadata.facilityId ? metadata.facilityId : undefined;
     const initial = { kind: current.kind, categoryId: current.categoryId, siteName: current.siteName ?? '', facilityId,
@@ -55,10 +58,17 @@ export function EventCard({ incident, catalog }: Props) {
         if (writing.current || operationBusy || id !== incident.id || !ready || !isDraft) return;
         writing.current = true; setSaving(true);
         try {
-            await incidentsApi.update(id, body);
+            const updated = await incidentsApi.update(id, body);
+            const changingCategory = !!body.categoryId && body.categoryId !== current.categoryId;
+            const desiredItemId = body.checkpoint ? catalog?.checklistItems.find(item => item.code === body.checkpoint)?.id
+                : changingCategory ? undefined : selectedCheckpoint?.itemId;
+            const retained = updated.checkpoints?.find(link => link.checklistItemId === desiredItemId);
+            setPreferredCheckpoint(retained ? { incidentId: id, itemId: retained.checklistItemId } : null);
+            await qc.cancelQueries({ queryKey: ['incident', id], exact: true });
+            qc.setQueryData(['incident', id], updated);
             await Promise.all([
                 qc.invalidateQueries({ queryKey: ['incidents'] }),
-                qc.invalidateQueries({ queryKey: ['incident', id] }),
+                qc.invalidateQueries({ queryKey: ['incident', id], exact: true }),
                 qc.invalidateQueries({ queryKey: ['object-report'] }),
                 qc.invalidateQueries({ queryKey: ['audit'] }),
             ]);
@@ -105,7 +115,7 @@ export function EventCard({ incident, catalog }: Props) {
         if (!window.confirm('Обновить карточку и сбросить несохранённые изменения формы?')) return;
         const result = await details.refetch();
         if (result.isError) { toast.error('Не удалось обновить карточку.'); return; }
-        setNeedsRefresh(false); setPending(null); setFormRevision(value => value + 1);
+        setNeedsRefresh(false); setPending(null); setPreferredCheckpoint(null); setFormRevision(value => value + 1);
     }
     const registered = current.createdAt && !Number.isNaN(new Date(current.createdAt).getTime())
         ? formatInTimeZone(current.createdAt, 'Europe/Moscow', 'dd.MM.yyyy HH:mm:ss') : 'Не указано';
