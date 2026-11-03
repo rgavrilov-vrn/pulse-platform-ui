@@ -1,0 +1,9 @@
+.event-table .event-title .event-category-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.event-table .event-title .event-checkpoints {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: .95em;
+}

@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import type { IncidentSummary } from '../api/types';
 import { moscowTime, moscowDate, relative } from '../utils/format';
 import { StatusBadge } from './StatusBadge';
+import './EventTable.css';
 
 export type Filter = 'all' | 'draft' | 'published' | 'cancelled';
 
@@ -110,7 +111,9 @@ export function EventTable(p: Props) {
                             <td>
                                 <div className="event-title">
                                     <span className={clsx('type-dot', e.kind)} />
-                                    {e.categoryName ?? 'Без категории'}
+                                    <span className="event-category-label">{e.categoryName ?? 'Без категории'}
+                                        {!!e.checkpointNames?.length && <span className="event-checkpoints">: {e.checkpointNames.join(', ')}</span>}
+                                    </span>
                                 </div>
                                 <div className="event-site">{e.siteName ?? '—'}</div>
                                 <div className="event-summary">{e.comment ?? ''}</div>

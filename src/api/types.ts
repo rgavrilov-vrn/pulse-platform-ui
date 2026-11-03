@@ -33,6 +33,7 @@ export interface IncidentSummary {
     authorName: string | null;
     siteName: string | null;
     categoryName: string | null;
+    checkpointNames?: string[];
     directionName: string | null;
     comment: string | null;
 }
