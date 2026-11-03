@@ -15,6 +15,35 @@ import './ObjectReportsPage.css';
 const statuses: Record<string, string> = { DRAFT: 'Черновик', RECORDED: 'Зарегистрировано', NEEDS_REVIEW: 'На рассмотрении', CONFIRMED: 'Подтверждено', REJECTED: 'Отклонено', CLOSED: 'Закрыто', CANCELLED: 'Отменено', ARCHIVED: 'В архиве' };
 const time = (value: string | null) => value && !Number.isNaN(new Date(value).getTime()) ? formatInTimeZone(value, 'Europe/Moscow', 'dd.MM.yyyy HH:mm:ss') : '—';
 const inputTime = (value: string | null) => value && !Number.isNaN(new Date(value).getTime()) ? formatInTimeZone(value, 'Europe/Moscow', "yyyy-MM-dd'T'HH:mm:ss") : '';
+const hasText = (value: string | null | undefined) => !!value?.trim();
+function commentCount(entry: ReportEntry): number {
+    const comments = entry.comments.filter(comment => hasText(comment.text));
+    const representedByTransition = (status: string, text: string | null) => {
+        const transition = comments.filter(comment => comment.source.startsWith('STATUS:') && comment.source.trim().endsWith(`→ ${status}`)).at(-1);
+        return !!transition && transition.text.trim() === text?.trim();
+    };
+    return Number(hasText(entry.initialComment)) + comments.length
+        + entry.points.filter(point => hasText(point.comment)).length
+        + Number(hasText(entry.cancellationReason) && !representedByTransition('CANCELLED', entry.cancellationReason))
+        + Number(hasText(entry.resolutionComment) && !representedByTransition('CLOSED', entry.resolutionComment));
+}
+function reportErrorMessage(error: unknown): string {
+    if (isAxiosError(error)) {
+        const status = error.response?.status;
+        if (status === 403) return 'HTTP 403: нет права incident:read.';
+        if (status === 404) return 'HTTP 404: API отчёта не найден. Проверьте версию backend.';
+        const body: unknown = error.response?.data;
+        let detail = '';
+        if (body && typeof body === 'object') {
+            const problem = body as Record<string, unknown>;
+            detail = typeof problem.detail === 'string' ? problem.detail : typeof problem.message === 'string' ? problem.message : '';
+        }
+        const message = (detail || error.message || 'Неизвестная ошибка').slice(0, 1500);
+        if (status) return `Не удалось загрузить отчёт. HTTP ${status}: ${message}`;
+        return `${error.request ? 'Ошибка соединения' : 'Ошибка подготовки запроса'}: ${message}`;
+    }
+    return error instanceof Error ? `Ошибка выполнения запроса: ${error.message.slice(0, 1500)}` : 'Не удалось загрузить отчёт: неизвестная ошибка.';
+}
 interface Draft { objectId: string; kind: string; categoryIds: string[]; checklistItemIds: string[]; statuses: string[]; createdBy: string; search: string; from: string; to: string; sort: string }
 function read(p: URLSearchParams): Draft {
     return { objectId: p.get('unassigned') === 'true' ? 'unassigned' : p.get('objectId') ?? '', kind: p.get('kind') ?? '', categoryIds: p.getAll('categoryIds'), checklistItemIds: p.getAll('checklistItemIds'), statuses: p.getAll('statuses'), createdBy: p.get('createdBy') ?? '', search: p.get('search') ?? '', from: inputTime(p.get('eventFrom')), to: inputTime(p.get('eventTo')), sort: p.get('sort') ?? 'eventTime,desc' };
@@ -28,12 +57,13 @@ function Multi({ label, options, value, onChange }: { label: string; options: Re
     </details>;
 }
 function Details({ entry: e }: { entry: ReportEntry }) {
-    return <details className="report-details"><summary>Комментарии ({e.comments.length}) и подробности</summary>
-        <dl><dt>Исходный комментарий</dt><dd>{e.initialComment || 'Не указан'}</dd></dl>
-        {e.points.map((p, n) => <div key={`${p.id}-${n}`}><h4>{p.name}</h4><p>{p.comment || 'Без комментария'}</p></div>)}
-        {e.comments.length > 0 && <ol>{e.comments.map((c, n) => <li key={n}><div className="subtle">{time(c.occurredAt)} МСК · {c.author} · {c.source}</div><p>{c.text}</p></li>)}</ol>}
-        {(e.cancellationReason || e.status === 'CANCELLED') && <div className="report-cancellation"><h4>Причина отмены</h4><p>{e.cancellationReason || 'Причина не указана'}</p></div>}
-        {e.resolutionComment && <><h4>Комментарий закрытия</h4><p>{e.resolutionComment}</p></>}
+    const comments = e.comments.filter(comment => hasText(comment.text));
+    return <details className="report-details"><summary>Комментарии ({commentCount(e)}) и подробности</summary>
+        <dl><dt>Исходный комментарий</dt><dd>{hasText(e.initialComment) ? e.initialComment : 'Не указан'}</dd></dl>
+        {e.points.map((p, n) => <div key={`${p.id}-${n}`}><h4>{p.name}</h4><p>{hasText(p.comment) ? p.comment : 'Без комментария'}</p></div>)}
+        {comments.length > 0 && <ol>{comments.map((c, n) => <li key={n}><div className="subtle">{time(c.occurredAt)} МСК · {c.author} · {c.source}</div><p>{c.text}</p></li>)}</ol>}
+        {(hasText(e.cancellationReason) || e.status === 'CANCELLED') && <div className="report-cancellation"><h4>Причина отмены</h4><p>{hasText(e.cancellationReason) ? e.cancellationReason : 'Причина не указана'}</p></div>}
+        {hasText(e.resolutionComment) && <><h4>Комментарий закрытия</h4><p>{e.resolutionComment}</p></>}
     </details>;
 }
 export function ObjectReportsPage() {
@@ -64,7 +94,12 @@ export function ObjectReportsPage() {
         for (const key of ['kind', 'createdBy', 'search', 'sort'] as const) if (draft[key].trim()) next.set(key, draft[key].trim());
         for (const key of ['categoryIds', 'checklistItemIds', 'statuses'] as const) for (const value of draft[key]) next.append(key, value);
         if (from) next.set('eventFrom', from.toISOString()); if (to) next.set('eventTo', to.toISOString());
-        next.set('page', '0'); next.set('size', params.get('size') ?? '25'); setError(''); setParams(next);
+        next.set('page', '0'); next.set('size', params.get('size') ?? '25'); setError('');
+        if (next.toString() === serialized) {
+            if (!report.isFetching) void report.refetch();
+        } else {
+            setParams(next);
+        }
     }
     function page(value: number, size?: number) { const next = new URLSearchParams(params); next.set('page', String(Math.max(0, value))); if (size) next.set('size', String(size)); setParams(next); }
     function reset() { const next = new URLSearchParams(); next.set('size', params.get('size') ?? '25'); next.set('page', '0'); setParams(next); setDraft(read(next)); setObjectSearch(''); setError(''); }
@@ -93,7 +128,7 @@ export function ObjectReportsPage() {
                 {error && <p role="alert" className="report-error">{error}</p>}
                 {options.isError && <p role="alert" className="report-error">Не удалось загрузить фильтры. <button type="button" className="btn btn-outline-secondary" onClick={() => void options.refetch()}>Повторить</button></p>}
             </form>
-            {report.isError && <p role="alert" className="report-error">{isAxiosError(report.error) && report.error.response?.status === 403 ? 'Нет права incident:read.' : 'Не удалось загрузить отчёт. Проверьте параметры и доступность сервера.'} <button className="btn btn-outline-secondary" onClick={() => void report.refetch()}>Повторить</button></p>}
+            {report.isError && <p role="alert" className="report-error">{reportErrorMessage(report.error)} <button type="button" className="btn btn-outline-secondary" disabled={report.isFetching} onClick={() => void report.refetch()}>Повторить</button></p>}
             <div className="report-scroll" aria-busy={report.isFetching}><table className="report-table"><caption>Найдено записей: {data?.totalElements ?? '—'}</caption>
                 <thead><tr>{['Объект / номер', 'Время события / регистрации (МСК)', 'Тип / категория', 'Контрольные точки', 'Статус', 'Оператор', 'Комментарии'].map(title => <th key={title} scope="col">{title}</th>)}</tr></thead>
                 <tbody>{report.isPending && <tr><td colSpan={7}>Загрузка…</td></tr>}{data && !data.content.length && <tr><td colSpan={7}>По выбранным условиям записей нет.</td></tr>}
@@ -102,8 +137,8 @@ export function ObjectReportsPage() {
                         <td data-label="Время события / регистрации"><time dateTime={e.eventTime}>{time(e.eventTime)}</time><small>Рег.: {time(e.createdAt)}</small></td>
                         <td data-label="Тип / категория"><span>{e.kind === 'VIOLATION' ? 'Нарушение' : 'Событие'}</span><small>{e.category}</small></td>
                         <td data-label="Контрольные точки">{e.points.length ? <ul>{e.points.map((point, n) => <li key={n}>{point.name}</li>)}</ul> : 'Не указана'}</td>
-                        <td data-label="Статус"><span className={`report-status ${e.status === 'CANCELLED' ? 'is-cancelled' : ''}`}>{statuses[e.status] ?? e.status}</span>{(e.cancellationReason || e.status === 'CANCELLED') && <small>Причина отмены: {e.cancellationReason || 'не указана'}</small>}</td>
-                        <td data-label="Оператор">{e.operatorName}</td><td data-label="Комментарии"><p className="report-excerpt">{e.initialComment || 'Без комментария'}</p><Details entry={e} /></td>
+                        <td data-label="Статус"><span className={`report-status ${e.status === 'CANCELLED' ? 'is-cancelled' : ''}`}>{statuses[e.status] ?? e.status}</span>{(hasText(e.cancellationReason) || e.status === 'CANCELLED') && <small>Причина отмены: {hasText(e.cancellationReason) ? e.cancellationReason : 'не указана'}</small>}</td>
+                        <td data-label="Оператор">{e.operatorName}</td><td data-label="Комментарии"><p className="report-excerpt">{hasText(e.initialComment) ? e.initialComment : 'Без комментария'}</p><Details entry={e} /></td>
                     </tr>)}</tbody></table></div>
             <DataPagination page={data?.page ?? Number(params.get('page') ?? 0)} size={data?.size ?? Number(params.get('size') ?? 25)} totalElements={data?.totalElements} totalPages={data?.totalPages} rowCount={data?.content.length ?? 0} loading={report.isFetching} label="Страницы отчёта по объектам" onPageChange={value => page(value)} onSizeChange={size => page(0, size)} />
         </section></main></div></>;
