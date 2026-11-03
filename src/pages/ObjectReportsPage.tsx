@@ -6,8 +6,10 @@ import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { ReportExportButtons } from '../components/ReportExportButtons';
+import { DataPagination } from '../components/DataPagination';
 import { useAuthContext } from '../auth/AuthContext';
 import { objectReportsApi, type ReportEntry, type ReportOption } from '../api/objectReports';
+import './AuditPage.css';
 import './ObjectReportsPage.css';
 
 const statuses: Record<string, string> = { DRAFT: 'Черновик', RECORDED: 'Зарегистрировано', NEEDS_REVIEW: 'На рассмотрении', CONFIRMED: 'Подтверждено', REJECTED: 'Отклонено', CLOSED: 'Закрыто', CANCELLED: 'Отменено', ARCHIVED: 'В архиве' };
@@ -45,6 +47,13 @@ export function ObjectReportsPage() {
     const options = useQuery({ queryKey: ['object-report-options', user?.id], queryFn: ({ signal }) => objectReportsApi.options(signal), enabled: !!user, retry: false });
     const report = useQuery({ queryKey: ['object-report', user?.id, serialized], queryFn: ({ signal }) => objectReportsApi.list(new URLSearchParams(serialized), signal), enabled: !!user, retry: false });
     const data = report.isError ? undefined : report.data;
+    useEffect(() => {
+        if (!report.data || report.isFetching || report.isError) return;
+        const last = Math.max(0, report.data.totalPages - 1);
+        if (report.data.page > last) {
+            const next = new URLSearchParams(serialized); next.set('page', String(last)); setParams(next, { replace: true });
+        }
+    }, [report.data, report.isFetching, report.isError, serialized, setParams]);
     function apply(event: FormEvent) {
         event.preventDefault();
         const from = draft.from ? fromZonedTime(draft.from, 'Europe/Moscow') : null;
@@ -57,26 +66,30 @@ export function ObjectReportsPage() {
         if (from) next.set('eventFrom', from.toISOString()); if (to) next.set('eventTo', to.toISOString());
         next.set('page', '0'); next.set('size', params.get('size') ?? '25'); setError(''); setParams(next);
     }
-    function page(value: number, size?: string) { const next = new URLSearchParams(params); next.set('page', String(Math.max(0, value))); if (size) next.set('size', size); setParams(next); }
-    function reset() { setParams(new URLSearchParams()); setDraft(read(new URLSearchParams())); setObjectSearch(''); setError(''); }
+    function page(value: number, size?: number) { const next = new URLSearchParams(params); next.set('page', String(Math.max(0, value))); if (size) next.set('size', String(size)); setParams(next); }
+    function reset() { const next = new URLSearchParams(); next.set('size', params.get('size') ?? '25'); next.set('page', '0'); setParams(next); setDraft(read(next)); setObjectSearch(''); setError(''); }
     return <><Header /><div className="app-body"><Sidebar /><main className="workspace report-workspace">
         <div className="page-heading"><div><div className="breadcrumb-line">Ситуационный центр / Отчёты</div><h1>События и нарушения по объектам</h1></div>
             <ReportExportButtons params={params} disabled={!data || report.isFetching} /></div>
         <section className="panel report-panel">
-            <form onSubmit={apply} className="report-filters">
-                <label>Объект<input className="form-control" type="search" aria-label="Поиск объекта" placeholder="Найти объект…" value={objectSearch} onChange={e => setObjectSearch(e.target.value)} />
-                    <select className="form-control" value={draft.objectId} onChange={e => setDraft(d => ({ ...d, objectId: e.target.value }))}><option value="">Все объекты</option><option value="unassigned">Объект не определён</option>{options.data?.objects.filter(o => o.id === draft.objectId || o.name.toLocaleLowerCase().includes(objectSearch.toLocaleLowerCase())).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
-                <label>С (МСК)<input className="form-control" type="datetime-local" step="1" value={draft.from} onChange={e => setDraft(d => ({ ...d, from: e.target.value }))} /></label>
-                <label>По (МСК, включительно)<input className="form-control" type="datetime-local" step="1" value={draft.to} onChange={e => setDraft(d => ({ ...d, to: e.target.value }))} /></label>
-                <label>Тип<select className="form-control" value={draft.kind} onChange={e => setDraft(d => ({ ...d, kind: e.target.value }))}><option value="">Все</option><option value="EVENT">События</option><option value="VIOLATION">Нарушения</option></select></label>
-                <label>Оператор<select className="form-control" value={draft.createdBy} onChange={e => setDraft(d => ({ ...d, createdBy: e.target.value }))}><option value="">Все</option>{options.data?.operators.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
-                <label className="report-search">Поиск<input className="form-control" type="search" maxLength={500} placeholder="Номер, категория, точка, комментарий, причина отмены…" value={draft.search} onChange={e => setDraft(d => ({ ...d, search: e.target.value }))} /></label>
-                <Multi label="Категории" options={options.data?.categories ?? []} value={draft.categoryIds} onChange={value => setDraft(d => ({ ...d, categoryIds: value, checklistItemIds: [] }))} />
-                <Multi label="Контрольные точки" options={(options.data?.checkpoints ?? []).filter(o => !draft.categoryIds.length || draft.categoryIds.includes(o.parentId ?? ''))} value={draft.checklistItemIds} onChange={value => setDraft(d => ({ ...d, checklistItemIds: value }))} />
-                <Multi label="Статусы" options={Object.entries(statuses).map(([id, name]) => ({ id, name, parentId: null }))} value={draft.statuses} onChange={value => setDraft(d => ({ ...d, statuses: value }))} />
-                <label>Сортировка<select className="form-control" value={draft.sort} onChange={e => setDraft(d => ({ ...d, sort: e.target.value }))}><option value="eventTime,desc">Сначала новые события</option><option value="eventTime,asc">Сначала старые события</option><option value="createdAt,desc">По регистрации</option><option value="objectName,asc">По объектам</option></select></label>
-                <div className="report-actions"><button className="btn btn-primary" type="submit">Применить</button><button className="btn btn-outline-secondary" type="button" onClick={reset}>Сбросить</button></div>
-                <p className="subtle report-hint">Время — МСК. Оператор — автор создания записи. Фильтры применяются кнопкой «Применить» или Enter. PDF/Excel содержат всю выборку по применённым фильтрам, а не только текущую страницу.</p>
+            <form onSubmit={apply} className="audit-filters">
+                <label className="audit-search">Поиск по всему отчёту<input className="form-control" type="search" maxLength={500} placeholder="Номер, категория, точка, комментарий, причина отмены…" value={draft.search} onChange={e => setDraft(d => ({ ...d, search: e.target.value }))} /></label>
+                <details className="audit-filter-details"><summary>Точные фильтры и период</summary>
+                    <div className="audit-filter-grid">
+                        <label>Объект<input className="form-control" type="search" aria-label="Поиск объекта" placeholder="Найти объект…" value={objectSearch} onChange={e => setObjectSearch(e.target.value)} />
+                            <select className="form-control" value={draft.objectId} onChange={e => setDraft(d => ({ ...d, objectId: e.target.value }))}><option value="">Все объекты</option><option value="unassigned">Объект не определён</option>{options.data?.objects.filter(o => o.id === draft.objectId || o.name.toLocaleLowerCase().includes(objectSearch.toLocaleLowerCase())).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+                        <label>С (МСК)<input className="form-control" type="datetime-local" step="1" value={draft.from} onChange={e => setDraft(d => ({ ...d, from: e.target.value }))} /></label>
+                        <label>По (МСК, включительно)<input className="form-control" type="datetime-local" step="1" value={draft.to} onChange={e => setDraft(d => ({ ...d, to: e.target.value }))} /></label>
+                        <label>Тип<select className="form-control" value={draft.kind} onChange={e => setDraft(d => ({ ...d, kind: e.target.value }))}><option value="">Все</option><option value="EVENT">События</option><option value="VIOLATION">Нарушения</option></select></label>
+                        <label>Оператор<select className="form-control" value={draft.createdBy} onChange={e => setDraft(d => ({ ...d, createdBy: e.target.value }))}><option value="">Все</option>{options.data?.operators.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+                        <Multi label="Категории" options={options.data?.categories ?? []} value={draft.categoryIds} onChange={value => setDraft(d => ({ ...d, categoryIds: value, checklistItemIds: [] }))} />
+                        <Multi label="Контрольные точки" options={(options.data?.checkpoints ?? []).filter(o => !draft.categoryIds.length || draft.categoryIds.includes(o.parentId ?? ''))} value={draft.checklistItemIds} onChange={value => setDraft(d => ({ ...d, checklistItemIds: value }))} />
+                        <Multi label="Статусы" options={Object.entries(statuses).map(([id, name]) => ({ id, name, parentId: null }))} value={draft.statuses} onChange={value => setDraft(d => ({ ...d, statuses: value }))} />
+                    </div>
+                </details>
+                <div className="audit-filter-actions"><label>Сортировка<select className="form-control" value={draft.sort} onChange={e => setDraft(d => ({ ...d, sort: e.target.value }))}><option value="eventTime,desc">Сначала новые события</option><option value="eventTime,asc">Сначала старые события</option><option value="createdAt,desc">По регистрации</option><option value="objectName,asc">По объектам</option></select></label>
+                    <button className="btn btn-primary" type="submit">Применить</button><button className="btn btn-outline-secondary" type="button" onClick={reset}>Сбросить</button><span className="subtle">Поиск и фильтры применяются кнопкой «Применить» или Enter.</span></div>
+                <p className="subtle report-hint">Время — МСК. Оператор — автор создания записи. PDF/Excel содержат всю выборку по применённым фильтрам, а не только текущую страницу.</p>
                 {error && <p role="alert" className="report-error">{error}</p>}
                 {options.isError && <p role="alert" className="report-error">Не удалось загрузить фильтры. <button type="button" className="btn btn-outline-secondary" onClick={() => void options.refetch()}>Повторить</button></p>}
             </form>
@@ -92,12 +105,6 @@ export function ObjectReportsPage() {
                         <td data-label="Статус"><span className={`report-status ${e.status === 'CANCELLED' ? 'is-cancelled' : ''}`}>{statuses[e.status] ?? e.status}</span>{(e.cancellationReason || e.status === 'CANCELLED') && <small>Причина отмены: {e.cancellationReason || 'не указана'}</small>}</td>
                         <td data-label="Оператор">{e.operatorName}</td><td data-label="Комментарии"><p className="report-excerpt">{e.initialComment || 'Без комментария'}</p><Details entry={e} /></td>
                     </tr>)}</tbody></table></div>
-            <footer className="report-pagination"><span role="status">{report.isFetching ? 'Обновление…' : data ? `Всего ${data.totalElements}; страница ${data.totalPages ? data.page + 1 : 0} из ${data.totalPages}` : 'Данные недоступны'}</span>
-                <label>Строк<select className="form-control" value={params.get('size') ?? '25'} disabled={report.isFetching} onChange={e => page(0, e.target.value)}>{[25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
-                <button className="btn btn-outline-secondary" aria-label="Первая страница" disabled={!data || data.page === 0 || report.isFetching} onClick={() => page(0)}>«</button>
-                <button className="btn btn-outline-secondary" disabled={!data || data.page === 0 || report.isFetching} onClick={() => page((data?.page ?? 0) - 1)}>Назад</button>
-                <button className="btn btn-outline-secondary" disabled={!data || data.page + 1 >= data.totalPages || report.isFetching} onClick={() => page((data?.page ?? 0) + 1)}>Далее</button>
-                <button className="btn btn-outline-secondary" aria-label="Последняя страница" disabled={!data || data.page + 1 >= data.totalPages || report.isFetching} onClick={() => page((data?.totalPages ?? 1) - 1)}>»</button>
-            </footer>
+            <DataPagination page={data?.page ?? Number(params.get('page') ?? 0)} size={data?.size ?? Number(params.get('size') ?? 25)} totalElements={data?.totalElements} totalPages={data?.totalPages} rowCount={data?.content.length ?? 0} loading={report.isFetching} label="Страницы отчёта по объектам" onPageChange={value => page(value)} onSizeChange={size => page(0, size)} />
         </section></main></div></>;
 }
