@@ -21,6 +21,10 @@ export function Sidebar() {
                 className={({ isActive }) => `rail-btn${isActive ? ' active' : ''}`} style={linkStyle}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 3h12l4 4v14H4zM8 11h8M8 15h8M8 7h3" strokeLinecap="round" strokeLinejoin="round" /></svg><span>Отчёты</span>
             </NavLink>
+            <NavLink to="/catalog" title="Категории и контрольные точки" aria-label="Категории и контрольные точки"
+                className={({ isActive }) => `rail-btn${isActive ? ' active' : ''}`} style={linkStyle}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" strokeLinejoin="round" /></svg><span>Справочники</span>
+            </NavLink>
             <NavLink to="/audit" title="Аудит" aria-label="Аудит"
                 className={({ isActive }) => `rail-btn${isActive ? ' active' : ''}`} style={linkStyle}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">

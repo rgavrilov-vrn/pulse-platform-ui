@@ -1,0 +1,27 @@
+.catalog-workspace { overflow-y: auto; }
+.catalog-panel { padding: 20px; margin-bottom: 16px; min-width: 0; }
+.catalog-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 20px; padding: 16px 20px; margin-bottom: 16px; }
+.catalog-toolbar > label:first-child { min-width: 200px; }
+.catalog-columns { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(400px, 1.8fr); gap: 16px; align-items: start; }
+.catalog-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.catalog-section-heading h2 { margin: 0; font-size: 16px; }
+.catalog-category-list { list-style: none; margin: 16px 0 0; padding: 0; }
+.catalog-category-list > li { padding: 12px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 8px; }
+.catalog-category-list > li.is-selected { background: var(--selected); border-color: var(--primary); }
+.catalog-category-select { display: block; text-align: left; width: 100%; border: 0; padding: 0 0 10px; background: transparent; color: var(--text); }
+.catalog-category-select > span { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.catalog-category-select small, .catalog-table small { display: block; margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }
+.catalog-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.catalog-table-scroll { overflow-x: auto; margin-top: 16px; }
+.catalog-table { width: 100%; border-collapse: collapse; }
+.catalog-table th, .catalog-table td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.catalog-table th { font-size: 11px; color: var(--muted); }
+.catalog-table td:first-child { overflow-wrap: anywhere; }
+.catalog-category-list .is-deleted, .catalog-table .is-deleted { color: var(--muted); opacity: .7; }
+.catalog-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.catalog-editor label { display: block; margin-bottom: 16px; }
+.catalog-check { display: inline-flex !important; align-items: center; gap: 8px; }
+.catalog-requirements { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 16px; }
+.catalog-error { color: var(--danger); display: flex; align-items: center; gap: 16px; overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .catalog-columns { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .catalog-form-grid { grid-template-columns: 1fr; } .catalog-panel { padding: 14px; } }
