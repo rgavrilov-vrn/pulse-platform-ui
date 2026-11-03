@@ -17,6 +17,10 @@ export function Sidebar() {
                     <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" strokeLinecap="round" />
                 </svg><span>События</span>
             </NavLink>
+            <NavLink to="/reports/objects" title="Отчёты по объектам" aria-label="Отчёты по объектам"
+                className={({ isActive }) => `rail-btn${isActive ? ' active' : ''}`} style={linkStyle}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 3h12l4 4v14H4zM8 11h8M8 15h8M8 7h3" strokeLinecap="round" strokeLinejoin="round" /></svg><span>Отчёты</span>
+            </NavLink>
             <NavLink to="/audit" title="Аудит" aria-label="Аудит"
                 className={({ isActive }) => `rail-btn${isActive ? ' active' : ''}`} style={linkStyle}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
