@@ -32,6 +32,7 @@ export interface IncidentSummary {
     assignedToName: string | null;
     authorName: string | null;
     siteName: string | null;
+    categoryId?: string | null;
     categoryName: string | null;
     checkpointNames?: string[];
     directionName: string | null;
@@ -46,7 +47,16 @@ export interface Material {
     downloadUrl: string;
 }
 
+export interface IncidentCheckpointLink {
+    id: string;
+    checklistItemId: string;
+    itemName: string;
+    categoryName: string | null;
+}
+
 export interface IncidentDetails extends IncidentSummary {
+    version?: number | null;
+    checkpoints?: IncidentCheckpointLink[];
     checkpoint: string | null;
     cameraId: string | null;
     cameraName: string | null;

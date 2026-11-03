@@ -34,6 +34,10 @@ export interface UpdateBody {
     severity?: IncidentSeverity;
     facilityId?: string;
     clearFacility?: boolean;
+    replaceCheckpoints?: boolean;
+    expectedCategoryId?: string;
+    expectedVersion?: number;
+    expectedCheckpointIds?: string[];
 }
 
 export const incidentsApi = {

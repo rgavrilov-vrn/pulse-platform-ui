@@ -102,7 +102,7 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
                         {facilities.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
                     <small id="event-site-note" className="subtle">Площадка сохраняется кнопкой «Сохранить». «Не указана» снимает привязку. Если площадку не менять, текущая привязка сохраняется.</small>
-                    {errors.facilityId && <small className="invalid-feedback d-block" role="alert">{errors.facilityId.message}</small>}
+                    {errors.facilityId && <small className="invalid-feedback d-block">{errors.facilityId.message}</small>}
                 </div>
                 <div className="field-block" style={{ minWidth: 0 }}><label htmlFor="event-time">Время события (МСК)</label>
                     <input id="event-time" type="datetime-local" step="1" className="form-control" style={{ width: '100%', minWidth: 0 }} {...register('eventTime')} />
@@ -116,13 +116,13 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
                     }}>{item.name}</button>)}
                 </div>
                 {!availableCategories.length && <small className="subtle">Категории выбранного типа пока недоступны.</small>}
-                <small id="event-category-note" className="subtle">Тип и категория сохраняются кнопкой «Сохранить». Если уже привязаны контрольные точки другой категории, сервер отклонит изменение; автоматически точки не удаляются.</small>
+                <small id="event-category-note" className="subtle">При сохранении другой категории появится подтверждение: прежние привязки контрольных точек будут мягко сняты, выбранная новая точка добавлена. Без подтверждения изменения не отправляются.</small>
                 {errors.categoryId && <small className="invalid-feedback d-block" role="alert">{errors.categoryId.message}</small>}
             </div>
             <div className="field-block"><label htmlFor="event-checkpoint">Контрольная точка (при наличии)</label>
                 <CheckpointSelect id="event-checkpoint" className="form-control" items={availableItems} disabled={!categoryId}
                     {...register('checkpoint', { onChange: () => clearErrors('checkpoint') })} value={checkpoint} aria-invalid={!!errors.checkpoint} aria-describedby="event-checkpoint-note event-checkpoint-error" />
-                <small id="event-checkpoint-note" className="subtle">{!categoryId ? 'Выберите категорию. ' : ''}Выбор добавляет привязку; существующие контрольные точки не удаляются.</small>
+                <small id="event-checkpoint-note" className="subtle">{!categoryId ? 'Выберите категорию. ' : ''}В прежней категории выбор добавляет привязку. При смене категории замена прежних привязок требует подтверждения.</small>
                 {errors.checkpoint && <small id="event-checkpoint-error" className="invalid-feedback d-block" role="alert">{errors.checkpoint.message}</small>}
             </div>
             <div className="field-block comment-block"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
