@@ -15,7 +15,9 @@ export const catalogAdminApi = {
     createCategory: (body: CategoryInput) => api.post<ManagedCategory>(`${base}/categories`, body).then(r => r.data),
     updateCategory: (id: string, body: CategoryInput) => api.put<ManagedCategory>(`${base}/categories/${id}`, body).then(r => r.data),
     deleteCategory: (id: string) => api.delete<{ deletedCheckpointCount: number }>(`${base}/categories/${id}`).then(r => r.data),
+    restoreCategory: (id: string) => api.post<ManagedCategory>(`${base}/categories/${id}/restore`).then(r => r.data),
     createPoint: (body: PointInput) => api.post<ManagedPoint>(`${base}/checklist-items`, body).then(r => r.data),
     updatePoint: (id: string, body: PointInput) => api.put<ManagedPoint>(`${base}/checklist-items/${id}`, body).then(r => r.data),
     deletePoint: (id: string) => api.delete(`${base}/checklist-items/${id}`).then(() => undefined),
+    restorePoint: (id: string) => api.post<ManagedPoint>(`${base}/checklist-items/${id}/restore`).then(r => r.data),
 };

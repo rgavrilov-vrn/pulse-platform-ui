@@ -33,6 +33,12 @@ function TrashButton({ name, disabled, onClick }: { name: string; disabled: bool
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" strokeLinecap="round" strokeLinejoin="round" /></svg>
     </button>;
 }
+function RestoreButton({ name, disabled, reason, onClick }: { name: string; disabled: boolean; reason?: string; onClick: () => void }) {
+    return <button type="button" className="catalog-restore-icon" title={reason ?? `Восстановить «${name}»`} aria-label={`Восстановить «${name}»`} disabled={disabled}
+        onClick={event => { event.stopPropagation(); onClick(); }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2.6 8.4M3 4v6h6M12 8v5l3 2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </button>;
+}
 function CatalogCard({ title, busy, onClose, children, footer }: { title: string; busy: boolean; onClose: () => void; children: ReactNode; footer: ReactNode }) {
     const ref = useRef<HTMLDialogElement>(null);
     useEffect(() => { const dialog = ref.current; if (dialog && !dialog.open) dialog.showModal(); return () => dialog?.close(); }, []);
@@ -53,6 +59,7 @@ export function CatalogAdminPage() {
     const [selectedId, setSelectedId] = useState('');
     const [editor, setEditor] = useState<Editor | null>(null);
     const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
+    const [restoring, setRestoring] = useState<DeleteTarget | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const writing = useRef(false);
@@ -132,6 +139,11 @@ export function CatalogAdminPage() {
         const ok = await write(() => target.type === 'category' ? catalogAdminApi.deleteCategory(target.row.id) : catalogAdminApi.deletePoint(target.row.id), target.type === 'category' ? 'Категория и её контрольные точки удалены' : 'Контрольная точка удалена');
         if (ok) setEditor(null);
     }
+    async function restore(target: DeleteTarget) {
+        setRestoring(null);
+        const ok = await write(() => target.type === 'category' ? catalogAdminApi.restoreCategory(target.row.id) : catalogAdminApi.restorePoint(target.row.id), target.type === 'category' ? 'Категория восстановлена. Контрольные точки восстанавливаются отдельно.' : 'Контрольная точка восстановлена');
+        if (ok) setEditor(null);
+    }
     const groupName = (id: string) => groups.data?.find(g => g.id === id)?.name ?? 'Тип не найден';
     const queryError = groups.error ?? categories.error ?? points.error;
     const editorCategoryName = editor ? categories.data?.find(c => c.id === editor.body.categoryId)?.name ?? editor.body.categoryId : '';
@@ -140,9 +152,11 @@ export function CatalogAdminPage() {
         <div className="page-heading"><div><div className="breadcrumb-line">Ситуационный центр / Справочники</div><h1>Категории и контрольные точки</h1></div></div>
         {!canRead ? <section className="panel catalog-panel" role="alert">Нет права incident_catalog:read.</section> : <>
             <section className="panel catalog-toolbar">
-                <label>Тип события<select className="form-control" value={groupId} disabled={busy} onChange={e => { setGroupId(e.target.value); setSelectedId(''); }}><option value="">Все типы</option>{groups.data?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
-                <label className="catalog-check catalog-toggle-deleted"><input type="checkbox" checked={includeDeleted} disabled={busy} onChange={e => setIncludeDeleted(e.target.checked)} />Показать удалённые</label>
                 {!canManage && <span className="subtle">Только просмотр. Для изменений требуется incident_catalog:manage.</span>}
+                <div className="catalog-filters">
+                    <label>Тип события<select className="form-control" value={groupId} disabled={busy} onChange={e => { setGroupId(e.target.value); setSelectedId(''); }}><option value="">Все типы</option>{groups.data?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
+                    <label className="catalog-check catalog-toggle-deleted"><input type="checkbox" checked={includeDeleted} disabled={busy} onChange={e => setIncludeDeleted(e.target.checked)} />Показать удалённые</label>
+                </div>
             </section>
             {(error || queryError) && !editor && <section className="panel catalog-panel catalog-error" role="alert">{error || message(queryError)}{queryError && <button type="button" className="btn btn-outline-secondary" disabled={busy} onClick={() => { void groups.refetch(); void categories.refetch(); if (category) void points.refetch(); }}>Повторить загрузку</button>}</section>}
             <div className="catalog-columns">
@@ -165,21 +179,21 @@ export function CatalogAdminPage() {
                                 onClick={event => { event.stopPropagation(); showCategory(c); }}><span style={{ fontWeight: 600 }}>{c.name}</span></button>
                             <small className="subtle" style={{ display: 'block', marginTop: 5 }}>{groupName(c.groupId)} · {c.code}{!c.active ? ' · Удалена' : ''}</small>
                         </div>
-                        {canManage && c.active && <TrashButton name={c.name} disabled={busy || !loaded} onClick={() => setDeleting({ type: 'category', row: c })} />}
+                        {canManage && (c.active ? <TrashButton name={c.name} disabled={busy || !loaded} onClick={() => setDeleting({ type: 'category', row: c })} /> : <RestoreButton name={c.name} disabled={busy || !loaded} onClick={() => setRestoring({ type: 'category', row: c })} />)}
                     </li>)}</ul>
                 </section>
                 <section className="panel catalog-panel">
                     <div className="catalog-section-heading"><div><h2>Контрольные точки</h2><span className="subtle">{category?.name ?? 'Выберите категорию'}</span></div>{canManage && <button type="button" className="btn btn-primary" disabled={busy || !loaded || !category?.active} onClick={newPoint}>Добавить точку</button>}</div>
                     {category && <><input className="form-control" type="search" aria-label="Поиск контрольной точки" placeholder="Название или код контрольной точки" value={pointSearch} disabled={busy} onChange={e => setPointSearch(e.target.value)} />
-                        {!category.active && <p className="subtle">Категория удалена. Карточки точек доступны только для просмотра.</p>}
+                        {!category.active && <p className="subtle">Категория удалена. Для восстановления точек сначала восстановите категорию.</p>}
                         {points.isPending && <p role="status">Загрузка контрольных точек…</p>}
-                        <div className="catalog-table-scroll" aria-busy={points.isFetching}><table className="catalog-table"><thead><tr><th>Название / код</th><th>Приоритет</th><th>Состояние</th>{canManage && <th className="catalog-delete-cell" aria-label="Удаление" />}</tr></thead><tbody>
-                            {visiblePoints.map(p => <tr key={p.id} className={!p.active ? 'is-deleted' : ''}><td><button type="button" className="catalog-name-button" disabled={busy || points.isFetching} aria-label={`Открыть контрольную точку «${p.name}»`} onClick={() => showPoint(p)}><span>{p.name}</span><small>{p.code}</small></button></td><td>{priorities[p.defaultSeverity] ?? p.defaultSeverity}</td><td>{p.active ? 'Активна' : 'Удалена'}</td>{canManage && <td className="catalog-delete-cell">{p.active && category.active && <TrashButton name={p.name} disabled={busy || points.isFetching} onClick={() => setDeleting({ type: 'point', row: p })} />}</td>}</tr>)}
+                        <div className="catalog-table-scroll" aria-busy={points.isFetching}><table className="catalog-table"><thead><tr><th>Название / код</th><th>Приоритет</th><th>Состояние</th>{canManage && <th className="catalog-delete-cell" aria-label="Удаление или восстановление" />}</tr></thead><tbody>
+                            {visiblePoints.map(p => <tr key={p.id} className={!p.active ? 'is-deleted' : ''}><td><button type="button" className="catalog-name-button" disabled={busy || points.isFetching} aria-label={`Открыть контрольную точку «${p.name}»`} onClick={() => showPoint(p)}><span>{p.name}</span><small>{p.code}</small></button></td><td>{priorities[p.defaultSeverity] ?? p.defaultSeverity}</td><td>{p.active ? 'Активна' : 'Удалена'}</td>{canManage && <td className="catalog-delete-cell">{p.active ? category.active && <TrashButton name={p.name} disabled={busy || points.isFetching} onClick={() => setDeleting({ type: 'point', row: p })} /> : <RestoreButton name={p.name} disabled={busy || points.isFetching || !category.active} reason={!category.active ? 'Сначала восстановите категорию' : undefined} onClick={() => setRestoring({ type: 'point', row: p })} />}</td>}</tr>)}
                             {!points.isPending && !points.isError && !visiblePoints.length && <tr><td colSpan={canManage ? 4 : 3}>Контрольных точек по выбранным условиям нет.</td></tr>}
                         </tbody></table></div></>}
                 </section>
             </div>
-            <p className="subtle catalog-note">Нажмите строку категории, чтобы показать её контрольные точки; нажмите название, чтобы также открыть карточку. Удаление мягкое: события и их связи сохраняются. При удалении категории деактивируются все её активные точки.</p>
+            <p className="subtle catalog-note">Строка категории показывает её точки, название открывает карточку. Удаление мягкое и каскадное для категории. Для восстановления включите «Показать удалённые» и нажмите иконку со стрелкой. Категория и точки восстанавливаются отдельно.</p>
         </>}
         {editor && <CatalogCard title={cardTitle} busy={busy} onClose={closeEditor} footer={<>
             {editable && <button className="btn btn-primary" type="submit" form="catalog-editor-form" disabled={busy}>{busy ? 'Сохранение…' : 'Сохранить'}</button>}
@@ -206,5 +220,6 @@ export function CatalogAdminPage() {
             </form>
         </CatalogCard>}
         {deleting && <ActionDialog title={deleting.type === 'category' ? 'Удалить категорию и все её точки?' : 'Удалить контрольную точку?'} description={deleting.type === 'category' ? `Категория «${deleting.row.name}» и все её активные контрольные точки будут деактивированы одной операцией. Ранее зарегистрированные события сохранятся.` : `Контрольная точка «${deleting.row.name}» больше не будет доступна для новых привязок. Существующие связи сохранятся.`} confirmLabel="Удалить" onCancel={() => setDeleting(null)} onConfirm={() => { if (!writing.current) void remove(deleting); }} />}
+        {restoring && <ActionDialog title={restoring.type === 'category' ? 'Восстановить категорию?' : 'Восстановить контрольную точку?'} description={restoring.type === 'category' ? `Категория «${restoring.row.name}» снова станет активной. Её удалённые контрольные точки автоматически не восстанавливаются — восстановите нужные отдельно.` : `Контрольная точка «${restoring.row.name}» снова станет доступна для выбора в активной категории. История и прежние связи сохранятся.`} confirmLabel="Восстановить" onCancel={() => setRestoring(null)} onConfirm={() => { if (!writing.current) void restore(restoring); }} />}
     </main></div></>;
 }
