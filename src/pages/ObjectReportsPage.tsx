@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios';
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
+import { ReportExportButtons } from '../components/ReportExportButtons';
 import { useAuthContext } from '../auth/AuthContext';
 import { objectReportsApi, type ReportEntry, type ReportOption } from '../api/objectReports';
 import './ObjectReportsPage.css';
@@ -60,7 +61,7 @@ export function ObjectReportsPage() {
     function reset() { setParams(new URLSearchParams()); setDraft(read(new URLSearchParams())); setObjectSearch(''); setError(''); }
     return <><Header /><div className="app-body"><Sidebar /><main className="workspace report-workspace">
         <div className="page-heading"><div><div className="breadcrumb-line">Ситуационный центр / Отчёты</div><h1>События и нарушения по объектам</h1></div>
-            <div className="report-actions"><button className="btn btn-outline-secondary" disabled title="Серверный экспорт PDF ещё не подключён">↓ PDF</button><button className="btn btn-outline-secondary" disabled title="Серверный экспорт Excel ещё не подключён">↓ Excel</button></div></div>
+            <ReportExportButtons params={params} disabled={!data || report.isFetching} /></div>
         <section className="panel report-panel">
             <form onSubmit={apply} className="report-filters">
                 <label>Объект<input className="form-control" type="search" aria-label="Поиск объекта" placeholder="Найти объект…" value={objectSearch} onChange={e => setObjectSearch(e.target.value)} />
@@ -75,7 +76,7 @@ export function ObjectReportsPage() {
                 <Multi label="Статусы" options={Object.entries(statuses).map(([id, name]) => ({ id, name, parentId: null }))} value={draft.statuses} onChange={value => setDraft(d => ({ ...d, statuses: value }))} />
                 <label>Сортировка<select className="form-control" value={draft.sort} onChange={e => setDraft(d => ({ ...d, sort: e.target.value }))}><option value="eventTime,desc">Сначала новые события</option><option value="eventTime,asc">Сначала старые события</option><option value="createdAt,desc">По регистрации</option><option value="objectName,asc">По объектам</option></select></label>
                 <div className="report-actions"><button className="btn btn-primary" type="submit">Применить</button><button className="btn btn-outline-secondary" type="button" onClick={reset}>Сбросить</button></div>
-                <p className="subtle report-hint">Время — МСК. Оператор — автор создания записи. Фильтры применяются кнопкой «Применить» или Enter. PDF/Excel будут доступны после подключения серверного экспорта.</p>
+                <p className="subtle report-hint">Время — МСК. Оператор — автор создания записи. Фильтры применяются кнопкой «Применить» или Enter. PDF/Excel содержат всю выборку по применённым фильтрам, а не только текущую страницу.</p>
                 {error && <p role="alert" className="report-error">{error}</p>}
                 {options.isError && <p role="alert" className="report-error">Не удалось загрузить фильтры. <button type="button" className="btn btn-outline-secondary" onClick={() => void options.refetch()}>Повторить</button></p>}
             </form>
