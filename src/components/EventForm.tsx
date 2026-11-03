@@ -8,6 +8,7 @@ import { fromApiKind } from '../api/incidentKind';
 import { CheckpointSelect } from './CheckpointSelect';
 import { EventTypeSelector } from './EventTypeSelector';
 import './CreateEventCard.css';
+import './SavedCheckpointLinks.css';
 const severityOptions: { value: IncidentSeverity; label: string }[] = [
     { value: 'LOW', label: 'Низкая' }, { value: 'MEDIUM', label: 'Средняя' },
     { value: 'HIGH', label: 'Высокая' }, { value: 'CRITICAL', label: 'Критическая' },
@@ -17,13 +18,15 @@ const schema = z.object({ kind: z.enum(['notice', 'incident']), categoryId: z.st
     eventTime: z.string().min(1, 'Укажите время'),
     comment: z.string().trim().min(1, 'Комментарий обязателен').max(10_000), checkpoint: z.string().optional() });
 export type EventFormValues = z.infer<typeof schema>;
+export interface CheckpointRemovalResult { removed: boolean; nextCheckpoint: string }
 interface Props {
     initial: { kind: IncidentKind | null; categoryId?: string | null; siteName: string; facilityId?: string; eventTime: string; comment: string; checkpoint: string;
-        checkpointLabel?: string; savedCheckpoints?: { id: string; name: string }[] };
+        checkpointLabel?: string; savedCheckpoints?: { id: string; name: string; code?: string }[] };
     severity: IncidentSeverity; categoryNames?: string[]; catalog: Catalog | undefined; disabled: boolean; saving: boolean; onSave: (values: EventFormValues) => void;
+    onRemoveCheckpoint?: (linkId: string) => Promise<CheckpointRemovalResult>;
     cancellationReason?: string | null;
 }
-export function EventForm({ initial, severity, categoryNames = [], catalog, disabled, saving, onSave, cancellationReason }: Props) {
+export function EventForm({ initial, severity, categoryNames = [], catalog, disabled, saving, onSave, onRemoveCheckpoint, cancellationReason }: Props) {
     const [categoryOverride, setCategoryOverride] = useState<string | null>(null);
     const [facilityOverride, setFacilityOverride] = useState<string | null>(null);
     const { register, handleSubmit, watch, setValue, getValues, getFieldState, setError, clearErrors, formState: { errors, isDirty } } = useForm<EventFormValues>({
@@ -64,6 +67,15 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
     const availableItems = categoryId ? items.filter((item) => item.categoryId === categoryId) : [];
     const savedPoints = initial.savedCheckpoints ?? [];
     const locked = disabled || saving;
+    async function removePoint(point: { id: string; name: string; code?: string }) {
+        if (locked || !onRemoveCheckpoint) return;
+        const result = await onRemoveCheckpoint(point.id);
+        if (result.removed && getValues('checkpoint') === (point.code ?? `saved:${point.id}`)) {
+            const sameCategory = getValues('kind') === initial.kind && (categoryOverride === null || categoryOverride === initial.categoryId);
+            setValue('checkpoint', sameCategory ? result.nextCheckpoint : '', { shouldDirty: true, shouldValidate: true });
+            clearErrors('checkpoint');
+        }
+    }
     return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((values) => {
         if (locked) return;
         if (!categoryId || !availableCategories.some((item) => item.id === categoryId)) {
@@ -123,13 +135,13 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
                 {errors.categoryId && <small className="invalid-feedback d-block" role="alert">{errors.categoryId.message}</small>}
             </div>
             <div className="field-block">
-                {savedPoints.length > 0 && <div aria-label="Сохранённые контрольные точки"><div className="subtle">Сохранённые привязки:</div><ul>{savedPoints.map(point => <li key={point.id}>{point.name}</li>)}</ul></div>}
+                {savedPoints.length > 0 && <div aria-label="Сохранённые контрольные точки"><div className="subtle">Сохранённые привязки:</div><ul>{savedPoints.map(point => <li key={point.id}><span className="saved-checkpoint-line"><span>{point.name}</span>{onRemoveCheckpoint && !disabled && <button type="button" className="saved-checkpoint-remove" disabled={locked} title={`Снять привязку «${point.name}»`} aria-label={`Снять привязку «${point.name}»`} onClick={() => void removePoint(point)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" /></svg></button>}</span></li>)}</ul></div>}
                 <label htmlFor="event-checkpoint">{savedPoints.length > 1 ? 'Добавить контрольную точку' : 'Контрольная точка (при наличии)'}</label>
                 <CheckpointSelect id="event-checkpoint" className="form-control" items={availableItems} disabled={!categoryId}
                     selectedLabel={checkpoint === initial.checkpoint ? initial.checkpointLabel : undefined}
                     emptyLabel={savedPoints.length > 1 ? 'Выберите точку для добавления' : 'Не указана'}
                     {...register('checkpoint', { onChange: () => clearErrors('checkpoint') })} value={checkpoint} aria-invalid={!!errors.checkpoint} aria-describedby="event-checkpoint-note event-checkpoint-error" />
-                <small id="event-checkpoint-note" className="subtle">{!categoryId ? 'Выберите категорию. ' : ''}Сохранённые привязки не снимаются при редактировании комментария, времени или приоритета. В прежней категории выбор добавляет точку; смена категории со снятием прежних привязок требует подтверждения.</small>
+                <small id="event-checkpoint-note" className="subtle">{!categoryId ? 'Выберите категорию. ' : ''}Крестик снимает только выбранную привязку сразу после подтверждения. Остальные изменения формы сохраняются кнопкой «Сохранить». Выбор в прежней категории добавляет точку; смена категории требует подтверждения.</small>
                 {errors.checkpoint && <small id="event-checkpoint-error" className="invalid-feedback d-block" role="alert">{errors.checkpoint.message}</small>}
             </div>
             <div className="field-block comment-block"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>

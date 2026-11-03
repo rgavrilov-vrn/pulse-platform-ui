@@ -5,10 +5,11 @@ import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Catalog, IncidentSummary } from '../api/types';
 import { incidentsApi, type UpdateBody } from '../api/incidents';
+import { useAuthContext } from '../auth/AuthContext';
 import { useCancelIncident, usePublishIncident, useIncident } from '../hooks/useIncidents';
 import { StatusBadge } from './StatusBadge';
 import { SeverityBadge } from './SeverityBadge';
-import { EventForm, type EventFormValues } from './EventForm';
+import { EventForm, type EventFormValues, type CheckpointRemovalResult } from './EventForm';
 import { savedCategoryNames } from './EventTypeSelector';
 import { ActionDialog } from './ActionDialog';
 import { IncidentMaterials } from './IncidentMaterials';
@@ -18,6 +19,7 @@ interface Props { incident: IncidentSummary; catalog: Catalog | undefined }
 interface PendingCategoryChange { incidentId: string; body: UpdateBody; description: string }
 export function EventCard({ incident, catalog }: Props) {
     const qc = useQueryClient();
+    const { hasAuthority } = useAuthContext();
     const details = useIncident(incident.id);
     const publish = usePublishIncident();
     const cancel = useCancelIncident();
@@ -54,6 +56,36 @@ export function EventCard({ incident, catalog }: Props) {
         : typeof metadata?.facilityId === 'string' && metadata.facilityId ? metadata.facilityId : undefined;
     const initial = { kind: current.kind, categoryId: current.categoryId, siteName: current.siteName ?? '', facilityId,
         eventTime: current.eventTime, comment: current.comment ?? '', checkpoint, checkpointLabel, savedCheckpoints };
+    async function removeSavedCheckpoint(linkId: string): Promise<CheckpointRemovalResult> {
+        const unchanged = { removed: false, nextCheckpoint: checkpoint };
+        if (writing.current || busy || !ready || !isDraft || !hasAuthority('incident:write')) return unchanged;
+        const target = savedCheckpoints.find(point => point.id === linkId);
+        if (!target || !window.confirm(`Снять привязку «${target.name}» к событию № ${current.number}? Точка в справочнике не удаляется. Снятие сохранится сразу; остальные несохранённые изменения останутся в форме.`)) return unchanged;
+        const id = incident.id;
+        let detached = false;
+        writing.current = true; setSaving(true);
+        try {
+            await incidentsApi.removeCheckpoint(id, linkId); detached = true;
+            await qc.cancelQueries({ queryKey: ['incident', id], exact: true });
+            const updated = await incidentsApi.get(id);
+            if (updated.categoryId !== current.categoryId || updated.categoryName !== current.categoryName || updated.kind !== current.kind)
+                throw new Error('Категория карточки изменилась. Обновите данные перед продолжением.');
+            const remaining = updated.checkpoints ?? [];
+            const selected = remaining.find(link => link.checklistItemId === selectedCheckpoint?.itemId) ?? remaining[0];
+            const nextCheckpoint = selected ? catalog?.checklistItems.find(item => item.id === selected.checklistItemId)?.code ?? `saved:${selected.id}` : '';
+            setPreferredCheckpoint(selected ? { incidentId: id, itemId: selected.checklistItemId } : null);
+            qc.setQueryData(['incident', id], updated);
+            await Promise.all(['incidents', 'object-report', 'audit'].map(key => qc.invalidateQueries({ queryKey: [key] })));
+            toast.success('Привязка снята');
+            return { removed: true, nextCheckpoint };
+        } catch (error) {
+            if (detached || (isAxiosError(error) && [404, 409].includes(error.response?.status ?? 0))) setNeedsRefresh(true);
+            if (detached) toast.error('Привязка снята, но данные карточки не удалось обновить. Нажмите «Обновить карточку».');
+            else if (isAxiosError(error)) toast.error(error.response?.data?.detail ?? error.response?.data?.message ?? 'Не удалось снять привязку');
+            else toast.error('Не удалось снять привязку');
+            return unchanged;
+        } finally { writing.current = false; setSaving(false); }
+    }
     async function perform(body: UpdateBody, id: string) {
         if (writing.current || operationBusy || id !== incident.id || !ready || !isDraft) return;
         writing.current = true; setSaving(true);
@@ -125,13 +157,15 @@ export function EventCard({ incident, catalog }: Props) {
             <h2>{categoryNames.join(' · ') || 'Без категории'}</h2>
             <div className="subtle" style={{ marginTop: 8, lineHeight: 1.5 }}>Зарегистрировано (МСК): {registered}</div>
         </div></div>
-        {needsRefresh && <div role="alert" style={{ padding: 16 }}>Карточка или привязки изменились. Требуется обновить данные и подтвердить смену категории заново.
+        {needsRefresh && <div role="alert" style={{ padding: 16 }}>Данные карточки или привязки изменились. Требуется обновить карточку перед продолжением.
             <button type="button" className="btn btn-outline-secondary" disabled={operationBusy || details.isFetching} onClick={() => void refreshAfterConflict()}>Обновить карточку</button></div>}
         {details.isError ? <div className="card-scroll"><p role="alert">Не удалось загрузить подробности события. Сохранение недоступно, чтобы не затереть данные.</p>
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
             : <div className="card-scroll event-details-scroll">
-                <EventForm key={`${incident.id}:${current.kind}:${current.categoryName}:${formRevision}`} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={busy} cancellationReason={current.status === 'CANCELLED' ? details.data?.cancellationReason ?? null : undefined} />
+                <EventForm key={`${incident.id}:${current.kind}:${current.categoryName}:${formRevision}`} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={busy}
+                    onRemoveCheckpoint={isDraft && hasAuthority('incident:write') ? removeSavedCheckpoint : undefined}
+                    cancellationReason={current.status === 'CANCELLED' ? details.data?.cancellationReason ?? null : undefined} />
                 <IncidentMaterials key={incident.id} incidentId={incident.id} canUpload={isDraft && !busy} onUploadingChange={setUploading} />
             </div>}
         {current.status !== 'CANCELLED' && <div className="card-actions event-card-actions"><div className="primary-actions">

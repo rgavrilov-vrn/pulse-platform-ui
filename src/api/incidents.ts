@@ -73,6 +73,9 @@ export const incidentsApi = {
             ...(body.kind === undefined ? {} : { kind: toApiKind(body.kind) }),
         }).then((r) => fromApiIncident<IncidentDetails>(r.data)),
 
+    removeCheckpoint: (id: string, linkId: string) =>
+        api.delete(`/api/v1/incidents/${id}/checkpoints/${linkId}`).then(() => undefined),
+
     publish: (id: string) =>
         api.post<ApiIncident<IncidentDetails>>(`/api/v1/incidents/${id}/publish`)
             .then((r) => fromApiIncident<IncidentDetails>(r.data)),

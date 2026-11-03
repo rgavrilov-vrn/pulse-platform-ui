@@ -1,0 +1,6 @@
+.saved-checkpoint-line { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; vertical-align: middle; }
+.saved-checkpoint-line > span { min-width: 0; overflow-wrap: anywhere; }
+.saved-checkpoint-remove { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 26px; padding: 4px; border: 1px solid transparent; border-radius: 4px; color: var(--danger, #a52a25); background: transparent; cursor: pointer; }
+.saved-checkpoint-remove:hover:not(:disabled) { border-color: currentColor; }
+.saved-checkpoint-remove:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.saved-checkpoint-remove:disabled { opacity: .45; cursor: not-allowed; }
