@@ -18,7 +18,8 @@ const schema = z.object({ kind: z.enum(['notice', 'incident']), categoryId: z.st
     comment: z.string().trim().min(1, 'Комментарий обязателен').max(10_000), checkpoint: z.string().optional() });
 export type EventFormValues = z.infer<typeof schema>;
 interface Props {
-    initial: { kind: IncidentKind | null; siteName: string; facilityId?: string; eventTime: string; comment: string; checkpoint: string };
+    initial: { kind: IncidentKind | null; categoryId?: string | null; siteName: string; facilityId?: string; eventTime: string; comment: string; checkpoint: string;
+        checkpointLabel?: string; savedCheckpoints?: { id: string; name: string }[] };
     severity: IncidentSeverity; categoryNames?: string[]; catalog: Catalog | undefined; disabled: boolean; saving: boolean; onSave: (values: EventFormValues) => void;
     cancellationReason?: string | null;
 }
@@ -32,13 +33,13 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
         if (initial.kind && !getFieldState('kind').isDirty && getValues('kind') !== initial.kind) {
             setValue('kind', initial.kind, { shouldDirty: false, shouldValidate: true });
         }
-        if (!getFieldState('checkpoint').isDirty && getValues('checkpoint') !== initial.checkpoint) {
+        if (!getFieldState('checkpoint').isDirty && categoryOverride === null && getValues('kind') === initial.kind && getValues('checkpoint') !== initial.checkpoint) {
             setValue('checkpoint', initial.checkpoint, { shouldDirty: false, shouldValidate: true });
         }
         if (!getFieldState('severity').isDirty && getValues('severity') !== severity) {
             setValue('severity', severity, { shouldDirty: false, shouldValidate: true });
         }
-    }, [initial.kind, initial.checkpoint, severity, getFieldState, getValues, setValue]);
+    }, [initial.kind, initial.checkpoint, categoryOverride, severity, getFieldState, getValues, setValue]);
     const kind = watch('kind');
     const checkpoint = watch('checkpoint') ?? '';
     const comment = watch('comment') ?? '';
@@ -53,13 +54,15 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
     const group = groups.find((item) => fromApiKind(item.code) === kind);
     const availableCategories = group ? categories.filter((item) => item.groupId === group.id) : [];
     const initialItem = items.find((item) => item.code === initial.checkpoint);
-    const savedCategory = (categoryNames.length === 1 ? availableCategories.find((item) => item.name === categoryNames[0]) : undefined)
+    const savedCategory = availableCategories.find((item) => item.id === initial.categoryId)
+        ?? (categoryNames.length === 1 ? availableCategories.find((item) => item.name === categoryNames[0]) : undefined)
         ?? availableCategories.find((item) => item.id === initialItem?.categoryId);
     const canUseDefault = kind !== initial.kind || (!initial.checkpoint && !categoryNames.length);
     const defaultName = kind === 'notice' ? 'Общая' : 'Биобезопасность';
     const defaultCategory = canUseDefault ? availableCategories.find((item) => item.name === defaultName) : undefined;
     const categoryId = categoryOverride ?? savedCategory?.id ?? defaultCategory?.id ?? '';
     const availableItems = categoryId ? items.filter((item) => item.categoryId === categoryId) : [];
+    const savedPoints = initial.savedCheckpoints ?? [];
     const locked = disabled || saving;
     return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((values) => {
         if (locked) return;
@@ -119,10 +122,14 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
                 <small id="event-category-note" className="subtle">При сохранении другой категории появится подтверждение: прежние привязки контрольных точек будут мягко сняты, выбранная новая точка добавлена. Без подтверждения изменения не отправляются.</small>
                 {errors.categoryId && <small className="invalid-feedback d-block" role="alert">{errors.categoryId.message}</small>}
             </div>
-            <div className="field-block"><label htmlFor="event-checkpoint">Контрольная точка (при наличии)</label>
+            <div className="field-block">
+                {savedPoints.length > 0 && <div aria-label="Сохранённые контрольные точки"><div className="subtle">Сохранённые привязки:</div><ul>{savedPoints.map(point => <li key={point.id}>{point.name}</li>)}</ul></div>}
+                <label htmlFor="event-checkpoint">{savedPoints.length > 1 ? 'Добавить контрольную точку' : 'Контрольная точка (при наличии)'}</label>
                 <CheckpointSelect id="event-checkpoint" className="form-control" items={availableItems} disabled={!categoryId}
+                    selectedLabel={checkpoint === initial.checkpoint ? initial.checkpointLabel : undefined}
+                    emptyLabel={savedPoints.length > 1 ? 'Выберите точку для добавления' : 'Не указана'}
                     {...register('checkpoint', { onChange: () => clearErrors('checkpoint') })} value={checkpoint} aria-invalid={!!errors.checkpoint} aria-describedby="event-checkpoint-note event-checkpoint-error" />
-                <small id="event-checkpoint-note" className="subtle">{!categoryId ? 'Выберите категорию. ' : ''}В прежней категории выбор добавляет привязку. При смене категории замена прежних привязок требует подтверждения.</small>
+                <small id="event-checkpoint-note" className="subtle">{!categoryId ? 'Выберите категорию. ' : ''}Сохранённые привязки не снимаются при редактировании комментария, времени или приоритета. В прежней категории выбор добавляет точку; смена категории со снятием прежних привязок требует подтверждения.</small>
                 {errors.checkpoint && <small id="event-checkpoint-error" className="invalid-feedback d-block" role="alert">{errors.checkpoint.message}</small>}
             </div>
             <div className="field-block comment-block"><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>

@@ -36,12 +36,21 @@ export function EventCard({ incident, catalog }: Props) {
     const categoryNames = savedCategoryNames(current, catalog);
     const isDraft = current.status === 'DRAFT';
     const ready = !!details.data && !details.isError;
-    const metadataCheckpoint = details.data?.metadata?.checkpoint;
-    const checkpoint = typeof details.data?.checkpoint === 'string' ? details.data.checkpoint : typeof metadataCheckpoint === 'string' ? metadataCheckpoint : '';
     const metadata = details.data?.metadata;
+    const metadataCheckpoint = metadata?.checkpoint;
+    const legacyCheckpoint = typeof details.data?.checkpoint === 'string' && details.data.checkpoint.trim() ? details.data.checkpoint
+        : typeof metadataCheckpoint === 'string' ? metadataCheckpoint : '';
+    const savedCheckpoints = (details.data?.checkpoints ?? []).map(link => {
+        const item = catalog?.checklistItems.find(item => item.id === link.checklistItemId);
+        return { id: link.id, name: link.itemName || item?.name || link.checklistItemId, code: item?.code ?? `saved:${link.id}` };
+    });
+    const checkpoint = savedCheckpoints.length === 1 ? savedCheckpoints[0].code : savedCheckpoints.length > 1 ? '' : legacyCheckpoint;
+    const checkpointLabel = savedCheckpoints.length === 1 ? savedCheckpoints[0].name
+        : typeof metadata?.checklistItemName === 'string' ? metadata.checklistItemName : undefined;
     const facilityId = typeof metadata?.objectId === 'string' && metadata.objectId ? metadata.objectId
         : typeof metadata?.facilityId === 'string' && metadata.facilityId ? metadata.facilityId : undefined;
-    const initial = { kind: current.kind, siteName: current.siteName ?? '', facilityId, eventTime: current.eventTime, comment: current.comment ?? '', checkpoint };
+    const initial = { kind: current.kind, categoryId: current.categoryId, siteName: current.siteName ?? '', facilityId,
+        eventTime: current.eventTime, comment: current.comment ?? '', checkpoint, checkpointLabel, savedCheckpoints };
     async function perform(body: UpdateBody, id: string) {
         if (writing.current || operationBusy || id !== incident.id || !ready || !isDraft) return;
         writing.current = true; setSaving(true);
@@ -81,7 +90,7 @@ export function EventCard({ incident, catalog }: Props) {
         }
         const names = saved.checkpoints.map(p => p.itemName || p.checklistItemId);
         const legacyName = typeof metadata?.checklistItemName === 'string' ? metadata.checklistItemName
-            : checkpoint ? catalog?.checklistItems.find(p => p.code === checkpoint)?.name ?? checkpoint : '';
+            : legacyCheckpoint ? catalog?.checklistItems.find(p => p.code === legacyCheckpoint)?.name ?? legacyCheckpoint : '';
         const oldName = saved.categoryName ?? catalog?.categories.find(c => c.id === saved.categoryId)?.name ?? saved.categoryId;
         const description = `Категория изменится с «${oldName}» на «${target.name}». `
             + (names.length ? `Будут мягко сняты прежние привязки (${names.length}): ${names.join('; ')}. ` : 'Активных привязок контрольных точек нет. ')
