@@ -34,12 +34,14 @@ export function EventCard({ incident, catalog }: Props) {
         if (!ready || !isDraft || busy) return;
         setSaving(true);
         try {
-            await incidentsApi.update(incident.id, { kind: values.kind, eventTime: values.eventTime, comment: values.comment,
+            await incidentsApi.update(incident.id, { categoryId: values.categoryId, eventTime: values.eventTime, comment: values.comment,
                 ...(values.checkpoint && values.checkpoint !== checkpoint ? { checkpoint: values.checkpoint } : {}) });
-            void qc.invalidateQueries({ queryKey: ['incidents'] });
-            void qc.invalidateQueries({ queryKey: ['incident', incident.id] });
+            await Promise.all([
+                qc.invalidateQueries({ queryKey: ['incidents'] }),
+                qc.invalidateQueries({ queryKey: ['incident', incident.id] }),
+            ]);
             toast.success('Изменения сохранены');
-        } catch (error: any) { toast.error(error.response?.data?.message ?? 'Ошибка сохранения'); }
+        } catch (error: any) { toast.error(error.response?.data?.detail ?? error.response?.data?.message ?? 'Ошибка сохранения'); }
         finally { setSaving(false); }
     };
     const registered = current.createdAt && !Number.isNaN(new Date(current.createdAt).getTime())
@@ -54,7 +56,7 @@ export function EventCard({ incident, catalog }: Props) {
             <button type="button" className="btn btn-outline-secondary" disabled={details.isFetching} onClick={() => void details.refetch()}>Повторить</button></div>
             : !ready ? <div className="card-scroll" role="status">Загрузка карточки…</div>
             : <div className="card-scroll event-details-scroll">
-                <EventForm key={incident.id} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={busy} cancellationReason={current.status === 'CANCELLED' ? details.data?.cancellationReason ?? null : undefined} />
+                <EventForm key={`${incident.id}:${current.kind}:${current.categoryName}`} initial={initial} severity={current.severity} categoryNames={categoryNames} catalog={catalog} disabled={!isDraft} onSave={onSave} saving={busy} cancellationReason={current.status === 'CANCELLED' ? details.data?.cancellationReason ?? null : undefined} />
                 <IncidentMaterials key={incident.id} incidentId={incident.id} canUpload={isDraft && !saving && !publish.isPending && !cancel.isPending} onUploadingChange={setUploading} />
             </div>}
         {current.status !== 'CANCELLED' && <div className="card-actions event-card-actions"><div className="primary-actions">

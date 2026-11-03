@@ -12,7 +12,7 @@ const severityOptions: { value: IncidentSeverity; label: string }[] = [
     { value: 'LOW', label: 'Низкая' }, { value: 'MEDIUM', label: 'Средняя' },
     { value: 'HIGH', label: 'Высокая' }, { value: 'CRITICAL', label: 'Критическая' },
 ];
-const schema = z.object({ kind: z.enum(['notice', 'incident']), siteName: z.string(), eventTime: z.string().min(1, 'Укажите время'),
+const schema = z.object({ kind: z.enum(['notice', 'incident']), categoryId: z.string().optional(), siteName: z.string(), eventTime: z.string().min(1, 'Укажите время'),
     comment: z.string().trim().min(1, 'Комментарий обязателен').max(10_000), checkpoint: z.string().optional() });
 export type EventFormValues = z.infer<typeof schema>;
 interface Props {
@@ -43,8 +43,8 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
     const group = groups.find((item) => fromApiKind(item.code) === kind);
     const availableCategories = group ? categories.filter((item) => item.groupId === group.id) : [];
     const initialItem = items.find((item) => item.code === initial.checkpoint);
-    const savedCategory = availableCategories.find((item) => item.id === initialItem?.categoryId)
-        ?? (categoryNames.length === 1 ? availableCategories.find((item) => item.name === categoryNames[0]) : undefined);
+    const savedCategory = (categoryNames.length === 1 ? availableCategories.find((item) => item.name === categoryNames[0]) : undefined)
+        ?? availableCategories.find((item) => item.id === initialItem?.categoryId);
     const canUseDefault = kind !== initial.kind || (!initial.checkpoint && !categoryNames.length);
     const defaultName = kind === 'notice' ? 'Общая' : 'Биобезопасность';
     const defaultCategory = canUseDefault ? availableCategories.find((item) => item.name === defaultName) : undefined;
@@ -53,15 +53,18 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
     const locked = disabled || saving;
     return <form id="event-form" className="card-scroll" onSubmit={handleSubmit((values) => {
         if (locked) return;
+        if (!categoryId || !availableCategories.some((item) => item.id === categoryId)) {
+            setError('categoryId', { type: 'validate', message: 'Выберите категорию выбранного типа события.' }); return;
+        }
         if (values.checkpoint && values.checkpoint !== initial.checkpoint && !availableItems.some((item) => item.code === values.checkpoint)) {
             setError('checkpoint', { type: 'validate', message: 'Выберите контрольную точку выбранной категории.' }); return;
         }
         const date = fromZonedTime(values.eventTime, 'Europe/Moscow');
         if (Number.isNaN(date.getTime())) { setError('eventTime', { type: 'validate', message: 'Укажите корректное время события.' }); return; }
-        onSave({ ...values, eventTime: date.toISOString() });
+        onSave({ ...values, categoryId, eventTime: date.toISOString() });
     })}>
         <EventTypeSelector groups={groups} value={kind} disabled={locked} error={errors.kind ? 'Выберите тип события из справочника.' : undefined} onChange={(value) => {
-            if (value !== kind) { setCategoryOverride(null); setValue('checkpoint', '', { shouldDirty: true }); clearErrors('checkpoint'); }
+            if (value !== kind) { setCategoryOverride(null); setValue('checkpoint', '', { shouldDirty: true }); clearErrors(['checkpoint', 'categoryId']); }
             setValue('kind', value, { shouldDirty: true, shouldValidate: true });
         }} />
         <fieldset disabled={locked}>
@@ -89,11 +92,12 @@ export function EventForm({ initial, severity, categoryNames = [], catalog, disa
             <div className="field-block">
                 <div className="create-choice-grid" role="group" aria-label="Категория" aria-describedby="event-category-note">
                     {availableCategories.map((item) => <button key={item.id} type="button" className={categoryId === item.id ? 'active' : ''} aria-pressed={categoryId === item.id} onClick={() => {
-                        if (categoryId !== item.id) { setCategoryOverride(item.id); setValue('checkpoint', '', { shouldDirty: true }); clearErrors('checkpoint'); }
+                        if (categoryId !== item.id) { setCategoryOverride(item.id); setValue('checkpoint', '', { shouldDirty: true }); clearErrors(['checkpoint', 'categoryId']); }
                     }}>{item.name}</button>)}
                 </div>
                 {!availableCategories.length && <small className="subtle">Категории выбранного типа пока недоступны.</small>}
-                <small id="event-category-note" className="subtle">Фильтр контрольных точек, а не изменение сохранённой категории. Сохранено: {categoryNames.join(' · ') || 'не указано'}.</small>
+                <small id="event-category-note" className="subtle">Тип и категория сохраняются кнопкой «Сохранить». Если уже привязаны контрольные точки другой категории, сервер отклонит изменение; автоматически точки не удаляются.</small>
+                {errors.categoryId && <small className="invalid-feedback d-block" role="alert">{errors.categoryId.message}</small>}
             </div>
             <div className="field-block"><label htmlFor="event-checkpoint">Контрольная точка (при наличии)</label>
                 <CheckpointSelect id="event-checkpoint" className="form-control" items={availableItems} disabled={!categoryId}

@@ -27,6 +27,7 @@ export interface CreateBody {
 
 export interface UpdateBody {
     kind?: IncidentKind;
+    categoryId?: string;
     eventTime?: string;
     comment?: string;
     checkpoint?: string;
