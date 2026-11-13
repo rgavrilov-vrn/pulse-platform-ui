@@ -39,7 +39,6 @@ export async function createManualIncident(body: ManualIncidentBody): Promise<In
         siteName: body.metadata.siteName,
         categoryName: body.metadata.categoryName ?? null,
         directionName: body.metadata.directionName ?? null,
-        deferredUntil: null,
         assignedToName: null,
         authorName: null,
     };

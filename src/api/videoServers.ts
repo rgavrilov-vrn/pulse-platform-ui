@@ -55,3 +55,74 @@ export async function listVideoEvents(params: VideoEventParams, signal?: AbortSi
     });
     return data;
 }
+
+export interface VideoCamera {
+    id: string;
+    videoServerId: string;
+    source: string | null;
+    externalId: string | null;
+    code: string | null;
+    name: string | null;
+    description: string | null;
+    status: string | null;
+    isActive: boolean;
+    lastSeenAt: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+}
+
+export interface VideoCameraParams {
+    videoServerId: string;
+    page: number;
+    size: number;
+    sort: string;
+    q?: string;
+    status?: string;
+    isActive?: boolean;
+    includeDeleted?: boolean;
+}
+
+export interface VideoChannel {
+    id: string;
+    videoServerId: string;
+    cameraId: string | null;
+    source: string | null;
+    externalId: string | null;
+    name: string | null;
+    description: string | null;
+    status: string | null;
+    isActive: boolean;
+    lastSeenAt: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+}
+
+export interface VideoChannelParams {
+    videoServerId: string;
+    page: number;
+    size: number;
+    sort: string;
+    cameraId?: string;
+    q?: string;
+    status?: string;
+    isActive?: boolean;
+    includeInactive?: boolean;
+}
+
+export async function listVideoCameras(params: VideoCameraParams, signal?: AbortSignal): Promise<Page<VideoCamera>> {
+    const { data } = await api.get<Page<VideoCamera>>('/api/v1/videoserver/cameras', {
+        params: { ...params, sort: [params.sort, 'id,asc'] },
+        paramsSerializer: { indexes: null },
+        signal,
+    });
+    return data;
+}
+
+export async function listVideoChannels(params: VideoChannelParams, signal?: AbortSignal): Promise<Page<VideoChannel>> {
+    const { data } = await api.get<Page<VideoChannel>>('/api/v1/videoserver/channels', {
+        params: { ...params, sort: [params.sort, 'id,asc'] },
+        paramsSerializer: { indexes: null },
+        signal,
+    });
+    return data;
+}
