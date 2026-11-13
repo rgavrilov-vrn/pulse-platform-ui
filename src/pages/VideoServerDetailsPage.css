@@ -1,531 +1,135 @@
 /* --- Базовые настройки страницы --- */
-.vsd-app {
-    overflow: hidden;
-}
-
+.vsd-app { overflow: hidden; }
 .vsd-workspace {
     display: flex;
     flex-direction: column;
     gap: 16px;
     height: 100%;
-    /* Отключаем глобальный скролл, чтобы верхняя часть была всегда на месте */
     overflow: hidden;
     padding: 20px 24px;
     padding-bottom: 24px;
 }
 
-/* --- Блок сводки (Карточка) --- */
+/* --- Блок сводки --- */
 .vsd-info-card {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 9px;
     padding: 20px;
     box-shadow: var(--shadow);
-    flex: none; /* Не дает карточке сжиматься при нехватке места */
+    flex: none;
     transition: padding 0.2s ease;
 }
+.vsd-info-card.is-collapsed { padding: 12px 20px; }
+.vsd-info-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.vsd-info-card:not(.is-collapsed) .vsd-info-header { margin-bottom: 20px; }
 
-.vsd-info-card.is-collapsed {
-    padding: 12px 20px;
-}
+.vsd-title-block { display: flex; flex-direction: column; gap: 6px; transition: opacity 0.2s; }
+.vsd-title-block.clickable { cursor: pointer; user-select: none; }
+.vsd-title-block.clickable:hover .vsd-title { color: var(--primary); }
+.vsd-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--text); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; line-height: 1.4; }
+.vsd-title-toggle { color: var(--muted); transition: transform 0.2s ease; margin-left: 8px; }
+.vsd-title-toggle.collapsed { transform: rotate(180deg); }
+.vsd-title-id { font-family: monospace; font-size: 14px; color: var(--muted); font-weight: 400; }
+.vsd-desc-text { font-size: 15px; font-weight: 400; color: var(--text); }
+.vsd-header-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.vsd-info-body { animation: fadeIn 0.2s ease-in-out; }
 
-/* Шапка */
-.vsd-info-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-.vsd-info-card:not(.is-collapsed) .vsd-info-header {
-    margin-bottom: 20px;
-}
-
-.vsd-title-block {
+/* --- Плашка "Нет данных" --- */
+.vsd-empty-health {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    transition: opacity 0.2s;
-}
-
-.vsd-title-block.clickable {
-    cursor: pointer;
-    user-select: none;
-}
-
-.vsd-title-block.clickable:hover .vsd-title {
-    color: var(--primary);
-}
-
-.vsd-title {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text);
-    display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
-    line-height: 1.4;
-}
-
-.vsd-title-toggle {
+    justify-content: center;
+    gap: 8px;
+    padding: 30px 20px;
+    background: var(--surface-soft);
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    text-align: center;
     color: var(--muted);
-    transition: transform 0.2s ease;
-    margin-left: 8px;
 }
-
-.vsd-title-toggle.collapsed {
-    transform: rotate(180deg);
-}
-
-.vsd-title-id {
-    font-family: monospace;
-    font-size: 14px;
-    color: var(--muted);
-    font-weight: 400;
-}
-
-.vsd-desc-text {
-    font-size: 15px;
-    font-weight: 400;
-    color: var(--text);
-}
-
-.vsd-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-}
-
-.vsd-info-body {
-    animation: fadeIn 0.2s ease-in-out;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-5px); }
-    to { opacity: 1; transform: translateY(0); }
-}
+.vsd-empty-health svg { color: var(--amber); margin-bottom: 8px; }
+.vsd-empty-health p { margin: 0; font-size: 14px; font-weight: 500; color: var(--text); }
+.vsd-empty-health small { font-size: 12px; }
 
 /* --- Сетка телеметрии --- */
-.vsd-telemetry-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
-}
-
+.vsd-telemetry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
 .vsd-telemetry-box {
-    background: var(--surface-soft);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: left;
-    font-family: inherit;
-    width: 100%;
+    background: var(--surface-soft); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px; cursor: pointer; transition: all 0.2s ease;
+    text-align: left; font-family: inherit; width: 100%;
 }
-
-.vsd-telemetry-box:hover {
-    border-color: var(--primary);
-    background: var(--selected);
-}
-
-.vsd-telemetry-box .label {
-    font-size: 11px;
-    color: var(--muted);
-    font-weight: 500;
-}
-
-.vsd-telemetry-box .value {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text);
-    line-height: 1.2;
-}
-
-.vsd-telemetry-box .value small {
-    font-size: 13px;
-    color: var(--muted);
-    font-weight: 400;
-}
-
-.vsd-telemetry-box .value.text-warn {
-    color: var(--amber);
-}
+.vsd-telemetry-box:hover { border-color: var(--primary); background: var(--selected); }
+.vsd-telemetry-box .label { font-size: 11px; color: var(--muted); font-weight: 500; }
+.vsd-telemetry-box .value { font-size: 20px; font-weight: 600; color: var(--text); line-height: 1.2; }
+.vsd-telemetry-box .value small { font-size: 13px; color: var(--muted); font-weight: 400; }
+.vsd-telemetry-box .value.text-warn { color: var(--amber); }
 
 /* --- Живой график --- */
-.vsd-chart-container {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 16px;
-    margin-bottom: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.vsd-chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 16px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-}
-
-.vsd-chart-ranges {
-    display: flex;
-    gap: 6px;
-    margin-top: 8px;
-}
-
-.vsd-range-btn {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    color: var(--muted);
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.vsd-range-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-}
-
-.vsd-range-btn.active {
-    background: var(--primary);
-    color: var(--on-primary);
-    border-color: var(--primary);
-}
-
-.vsd-chart-current {
-    font-size: 13px;
-    color: var(--text);
-}
-
-.vsd-chart-current strong {
-    color: var(--primary);
-    font-size: 15px;
-}
-
-.vsd-chart-wrapper {
-    display: flex;
-    gap: 12px;
-    height: 120px;
-}
-
-.vsd-chart-y-axis {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    font-size: 10px;
-    color: var(--muted);
-    text-align: right;
-    width: 30px;
-    padding-bottom: 2px;
-}
-
-.vsd-chart-svg-container {
-    flex: 1;
-    position: relative;
-    border-left: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    background-image: linear-gradient(to right, var(--line) 1px, transparent 1px);
-    background-size: 25% 100%;
-    cursor: crosshair;
-}
-
-.vsd-chart-svg-container svg {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
-
-.vsd-chart-crosshair {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--primary);
-    opacity: 0.5;
-    pointer-events: none;
-    transform: translateX(-50%);
-}
-
-.vsd-chart-tooltip {
-    position: absolute;
-    top: 10px;
-    transform: translateX(-50%);
-    background: var(--text);
-    color: var(--surface);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.vsd-tooltip-time {
-    font-size: 9px;
-    opacity: 0.8;
-}
-
-.vsd-tooltip-val {
-    font-weight: 600;
-}
-
-.vsd-chart-x-axis {
-    display: flex;
-    justify-content: space-between;
-    margin-left: 42px;
-    margin-top: 6px;
-    font-size: 10px;
-    color: var(--muted);
-}
+.vsd-chart-container { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; }
+.vsd-chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; font-size: 12px; font-weight: 600; color: var(--text); }
+.vsd-chart-ranges { display: flex; gap: 6px; margin-top: 8px; }
+.vsd-range-btn { background: var(--surface); border: 1px solid var(--line); color: var(--muted); padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: all 0.2s; }
+.vsd-range-btn:hover { border-color: var(--primary); color: var(--primary); }
+.vsd-range-btn.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.vsd-chart-current { font-size: 13px; color: var(--text); }
+.vsd-chart-current strong { color: var(--primary); font-size: 15px; }
+.vsd-chart-wrapper { display: flex; gap: 12px; height: 120px; }
+.vsd-chart-y-axis { display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: var(--muted); text-align: right; width: 30px; padding-bottom: 2px; }
+.vsd-chart-svg-container { flex: 1; position: relative; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: 25% 100%; cursor: crosshair; }
+.vsd-chart-svg-container svg { width: 100%; height: 100%; display: block; }
+.vsd-chart-crosshair { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--primary); opacity: 0.5; pointer-events: none; transform: translateX(-50%); }
+.vsd-chart-tooltip { position: absolute; top: 10px; transform: translateX(-50%); background: var(--text); color: var(--surface); padding: 4px 8px; border-radius: 4px; font-size: 11px; white-space: nowrap; pointer-events: none; z-index: 10; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+.vsd-tooltip-time { font-size: 9px; opacity: 0.8; }
+.vsd-tooltip-val { font-weight: 600; }
+.vsd-chart-x-axis { display: flex; justify-content: space-between; margin-left: 42px; margin-top: 6px; font-size: 10px; color: var(--muted); }
 
 /* --- Панель с вкладками --- */
-.vsd-main-panel {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    display: flex;
-    flex-direction: column;
-    /* Занимает всё оставшееся пространство и позволяет таблице скроллиться внутри */
-    flex: 1;
-    min-height: 0;
-    box-shadow: var(--shadow);
-}
+.vsd-main-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; display: flex; flex-direction: column; flex: 1; min-height: 0; box-shadow: var(--shadow); }
+.vsd-tabs { display: flex; gap: 24px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--surface-soft); flex: none; }
+.vsd-tabs button { background: none; border: none; padding: 16px 0; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+.vsd-tabs button:hover { color: var(--text); }
+.vsd-tabs button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
 
-.vsd-tabs {
-    display: flex;
-    gap: 24px;
-    padding: 0 20px;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface-soft);
-    flex: none;
-}
+.vsd-tab-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.vsd-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
-.vsd-tabs button {
-    background: none;
-    border: none;
-    padding: 16px 0;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
+/* Тулбар с фильтрами */
+.vsd-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; flex: none; }
+.vsd-toolbar-filters { display: flex; gap: 12px; align-items: center; flex: 1; }
+.vsd-search-input { max-width: 300px; }
+.vsd-toolbar-filters select { width: 160px; }
 
-.vsd-tabs button:hover {
-    color: var(--text);
-}
-
-.vsd-tabs button.active {
-    color: var(--primary);
-    border-bottom-color: var(--primary);
-    font-weight: 600;
-}
-
-.badge-count {
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 10px;
-    border: 1px solid var(--line);
-}
-
-.vsd-tabs button.active .badge-count {
-    background: var(--primary);
-    color: var(--on-primary);
-    border-color: var(--primary);
-}
-
-/* --- Контент вкладок --- */
-.vsd-tab-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-}
-
-.vsd-panel {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-}
-
-.vsd-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    padding: 16px 20px;
-    flex: none;
-}
-
-.vsd-search-input {
-    max-width: 350px;
-}
-
-/* Таблица с внутренним скроллом */
-.table-responsive {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-}
+.table-responsive { flex: 1; overflow-y: auto; min-height: 0; }
 
 /* --- Вкладка: Детали --- */
-.vsd-tech-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-    padding: 20px;
-    overflow-y: auto; /* Позволяет скроллить карточки, если они не влезают */
-}
-
-.vsd-tech-card {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 16px;
-    height: fit-content;
-}
-
-.vsd-tech-card h3 {
-    margin: 0 0 16px 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text);
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 12px;
-}
-
-.vsd-tech-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-    font-size: 13px;
-}
-
-.vsd-tech-row:last-child {
-    margin-bottom: 0;
-}
-
-.vsd-tech-row > span {
-    color: var(--muted);
-}
-
-.vsd-tech-row strong {
-    color: var(--text);
-    font-weight: 600;
-}
-
+.vsd-tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; padding: 20px; overflow-y: auto; }
+.vsd-tech-card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; height: fit-content; }
+.vsd-tech-card h3 { margin: 0 0 16px 0; font-size: 14px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.vsd-tech-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; }
+.vsd-tech-row:last-child { margin-bottom: 0; }
+.vsd-tech-row > span { color: var(--muted); }
+.vsd-tech-row strong { color: var(--text); font-weight: 600; }
 .vsd-tech-row strong.text-danger { color: var(--danger); }
 .vsd-tech-row strong.text-warn { color: var(--amber); }
-
-.error-text {
-    display: block;
-    font-size: 11px;
-    color: var(--danger);
-    background: #fae8e5;
-    padding: 6px 10px;
-    border-radius: 4px;
-    margin-top: 12px;
-    word-break: break-all;
-}
-
-[data-bs-theme=dark] .error-text {
-    background: #482d28;
-    color: #ffb4ab;
-}
+.error-text { display: block; font-size: 11px; color: var(--danger); background: #fae8e5; padding: 6px 10px; border-radius: 4px; margin-top: 12px; word-break: break-all; }
+[data-bs-theme=dark] .error-text { background: #482d28; color: #ffb4ab; }
 
 /* --- Текстовые ссылки --- */
-.vsd-link {
-    background: none;
-    border: none;
-    padding: 0;
-    font-family: inherit;
-    font-size: 13px;
-    color: var(--accent);
-    cursor: pointer;
-    text-decoration: none;
-    transition: opacity 0.2s;
-    white-space: nowrap;
-}
-
-.vsd-link:hover {
-    text-decoration: underline;
-}
-
-.vsd-link:disabled {
-    color: var(--muted);
-    cursor: not-allowed;
-    text-decoration: none;
-    opacity: 0.6;
-}
+.vsd-link { background: none; border: none; padding: 0; font-family: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-decoration: none; transition: opacity 0.2s; white-space: nowrap; }
+.vsd-link:hover { text-decoration: underline; }
+.vsd-link:disabled { color: var(--muted); cursor: not-allowed; text-decoration: none; opacity: 0.6; }
 
 /* --- Плашки и бейджи --- */
-.vsd-active-filter {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    background: var(--selected);
-    padding: 6px 12px;
-    border-radius: 6px;
-    color: var(--primary);
-}
-
-.vsd-external-id {
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--text);
-    background: var(--surface-soft);
-    padding: 4px 8px;
-    border-radius: 4px;
-    border: 1px solid var(--line);
-    display: inline-block;
-    width: fit-content;
-    word-break: break-all;
-}
-
-.vsd-badge {
-    display: inline-block;
-    width: fit-content;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.2;
-}
-
+.vsd-active-filter { display: flex; align-items: center; gap: 12px; font-size: 13px; background: var(--selected); padding: 6px 12px; border-radius: 6px; color: var(--primary); }
+.vsd-external-id { font-family: monospace; font-size: 12px; color: var(--text); background: var(--surface-soft); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; width: fit-content; word-break: break-all; }
+.vsd-badge { display: inline-block; width: fit-content; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; line-height: 1.2; }
 .vsd-badge.good { background: #eaf3ed; color: #427452; }
 .vsd-badge.bad { background: #fae8e5; color: #ab3d35; }
 .vsd-badge.warn { background: #fff1d8; color: #936316; }
-
 [data-bs-theme=dark] .vsd-badge.good { background: #233c2c; color: #a6d7b3; }
 [data-bs-theme=dark] .vsd-badge.bad { background: #482d28; color: #ffb4ab; }
 [data-bs-theme=dark] .vsd-badge.warn { background: #433a21; color: #eac784; }
