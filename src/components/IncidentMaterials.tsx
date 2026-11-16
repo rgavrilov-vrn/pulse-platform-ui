@@ -4,11 +4,13 @@ import { isAxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import { materialsApi, type IncidentMaterial } from '../api/materials';
+import { useAuthContext } from '../auth/AuthContext';
 import { MaterialPreview } from './MaterialPreview';
 import './IncidentMaterials.css';
 
 type Job = { id: string; file: File; state: 'queued' | 'uploading' | 'done' | 'failed'; progress: number; error?: string };
 interface Props { incidentId: string; canUpload: boolean; onUploadingChange: (value: boolean) => void }
+interface ScreenshotAvailability { canRequestTrassirScreenshot: boolean; reason: string | null }
 function message(error: unknown): string {
     if (isAxiosError(error)) {
         if (error.response?.status === 413) return 'Файл превышает разрешённый размер.';
@@ -21,11 +23,29 @@ function message(error: unknown): string {
     }
     return 'Операция не завершена. Проверьте список файлов перед повтором.';
 }
+function screenshotMessage(error: unknown): string {
+    if (isAxiosError(error)) {
+        if (error.response?.status === 504) return 'Истекло время ожидания скриншота Trassir.';
+        if (error.response?.status === 502) return 'Trassir недоступен или вернул некорректный скриншот.';
+        if (error.response?.status === 409) return 'Для запроса скриншота не хватает данных камеры, времени события или адреса регистратора.';
+        if (!error.response) return 'Нет ответа от сервера. Обновите список материалов перед повторным запросом.';
+    }
+    return message(error);
+}
 function size(bytes: number): string {
     return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} КБ` : `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
 }
 export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: Props) {
     const qc = useQueryClient();
+    const { hasAuthority } = useAuthContext();
+    const canRequestScreenshot = hasAuthority('incident:write');
+    const screenshotUrl = `/api/v1/incidents/${encodeURIComponent(incidentId)}/materials/trassir-screenshot`;
+    const availability = useQuery({
+        queryKey: ['incident-screenshot-availability', incidentId],
+        queryFn: async ({ signal }) => (await api.get<ScreenshotAvailability>(screenshotUrl, { signal })).data,
+        enabled: canRequestScreenshot,
+        retry: false,
+    });
     const contentId = useId();
     const [collapsed, setCollapsed] = useState(false);
     const input = useRef<HTMLInputElement>(null);
@@ -35,8 +55,10 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
     const [dragging, setDragging] = useState(false);
     const [jobs, setJobs] = useState<Job[]>([]);
     const [uploadBusy, setBusy] = useState(false);
+    const [screenshotBusy, setScreenshotBusy] = useState(false);
+    const [screenshotError, setScreenshotError] = useState<string | null>(null);
     const [deleting, setDeleting] = useState<string | null>(null);
-    const busy = uploadBusy || !!deleting;
+    const busy = uploadBusy || screenshotBusy || !!deleting;
     const [downloading, setDownloading] = useState<string | null>(null);
     const query = useQuery({
         queryKey: ['incident-materials', incidentId],
@@ -47,6 +69,39 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
         controller.current?.abort();
         onUploadingChange(false);
     }, [onUploadingChange]);
+    async function requestScreenshot() {
+        if (!canRequestScreenshot || !availability.data?.canRequestTrassirScreenshot || running.current || busy || downloading) return;
+        running.current = true;
+        setScreenshotBusy(true);
+        setScreenshotError(null);
+        onUploadingChange(true);
+        setCollapsed(false);
+        const abort = new AbortController();
+        controller.current = abort;
+        try {
+            const { data: material } = await api.post<IncidentMaterial>(`${screenshotUrl}/retry`, undefined,
+                { signal: abort.signal, timeout: 30_000 });
+            await qc.cancelQueries({ queryKey: ['incident-materials', incidentId], exact: true });
+            qc.setQueryData<IncidentMaterial[]>(['incident-materials', incidentId], current =>
+                [...(current ?? []).filter(item => item.id !== material.id), material]);
+            if (!abort.signal.aborted) toast.success('Скриншот добавлен в материалы');
+            await Promise.all([
+                qc.invalidateQueries({ queryKey: ['incident-materials', incidentId], exact: true }),
+                qc.invalidateQueries({ queryKey: ['incidents'] }),
+                qc.invalidateQueries({ queryKey: ['audit'] }),
+            ]).catch(() => undefined);
+        } catch (error) {
+            if (!abort.signal.aborted) {
+                const text = screenshotMessage(error);
+                setScreenshotError(text);
+                toast.error(text);
+                void qc.invalidateQueries({ queryKey: ['incident-materials', incidentId], exact: true });
+            }
+        } finally {
+            running.current = false;
+            if (!abort.signal.aborted) { setScreenshotBusy(false); onUploadingChange(false); }
+        }
+    }
     function update(id: string, patch: Partial<Job>) {
         setJobs((current) => current.map((job) => job.id === id ? { ...job, ...patch } : job));
     }
@@ -133,15 +188,23 @@ export function IncidentMaterials({ incidentId, canUpload, onUploadingChange }: 
             event.preventDefault(); dragDepth.current = 0; setDragging(false);
             addFiles(Array.from(event.dataTransfer.files));
         }}>
-        <div className="incident-materials-heading">
+        <div className="incident-materials-heading" style={{ flexWrap: 'wrap', gap: 8 }}>
             <h3><button type="button" aria-expanded={!collapsed} aria-controls={contentId}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', color: 'inherit', font: 'inherit', padding: '6px 0' }}
                 onClick={() => setCollapsed((value) => !value)}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ transform: collapsed ? 'rotate(-90deg)' : undefined }}><path d="m6 9 6 6 6-6" /></svg>
                 Материалы {query.data ? `(${query.data.length})` : ''}
             </button></h3>
+            {canRequestScreenshot && availability.data?.canRequestTrassirScreenshot && <button type="button"
+                className="btn btn-outline-secondary" disabled={busy || !!downloading} aria-busy={screenshotBusy}
+                title="Получить кадр Trassir на исходное время события. Будет добавлено новое вложение."
+                onClick={() => void requestScreenshot()}>{screenshotBusy ? 'Получение скриншота…' : 'Запросить скриншот'}</button>}
             {canUpload && !collapsed && <button type="button" className="btn btn-outline-secondary" disabled={busy} onClick={() => input.current?.click()}>Прикрепить файлы</button>}
         </div>
+        {screenshotError && <p role="alert" className="incident-upload-error">{screenshotError}</p>}
+        {canRequestScreenshot && availability.isError && <p className="subtle">Не удалось проверить доступность запроса скриншота.{' '}
+            <button type="button" className="btn btn-outline-secondary" disabled={availability.isFetching || busy}
+                onClick={() => void availability.refetch()}>Проверить ещё раз</button></p>}
         <div id={contentId} hidden={collapsed}>
         <input ref={input} type="file" hidden multiple disabled={!canUpload || busy}
             accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,.csv,.mp4,.webm,.docx,.xlsx" onChange={(event) => {
