@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
+import toast from 'react-hot-toast';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { VideoPager, videoError, videoTime } from '../components/VideoServerWidgets';
@@ -14,6 +16,15 @@ import {
     type VideoChannelParams,
     type ServerHealth
 } from '../api/videoServers';
+import {
+    listTrassirEvents,
+    listTrassirSystemEvents,
+    retryTrassirEvent,
+    listTrassirIngestLogs,
+    type TrassirEventParams,
+    type TrassirSystemEventParams,
+    type TrassirIngestLogParams
+} from '../api/trassir';
 import { useAuthContext } from '../auth/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
 import './VideoServerDetailsPage.css';
@@ -29,6 +40,11 @@ function formatUptime(startupAtStr: string | null) {
     return `${days} д. ${hours} ч.`;
 }
 
+function getEventTime(e: { occurredAt?: string | null; observedAt?: string | null; createdAt?: string | null; receivedAt?: string | null }) {
+    const timeStr = e.occurredAt || e.observedAt || e.createdAt || e.receivedAt;
+    return timeStr ? videoTime(timeStr) : '—';
+}
+
 // --- Компонент живого графика ---
 interface HealthPoint { time: number; value: number; }
 type ChartRange = '1d' | '3d' | '5d' | '7d' | '10d' | '30d';
@@ -38,7 +54,7 @@ function HealthChart({ currentLoad }: { currentLoad: number }) {
     const generateInitialData = (): HealthPoint[] => {
         const points: HealthPoint[] = [];
         const now = Date.now();
-        let currentValue = currentLoad || 15; // Fallback, если нет данных
+        let currentValue = currentLoad || 15;
         for (let i = 8639; i >= 0; i--) {
             currentValue = Math.max(5, Math.min(95, currentValue + (Math.random() - 0.5) * 12));
             points.push({ time: now - i * 5 * 60 * 1000, value: currentValue });
@@ -141,14 +157,12 @@ function TechDetailsTab({ t }: { t: ServerHealth | undefined }) {
                 <div className="vsd-tech-row"><span>CPU</span><strong className={t.cpuUsage > 80 ? 'text-danger' : ''}>{t.cpuUsage.toFixed(1)}%</strong></div>
                 <div className="vsd-tech-row"><span>GPU</span><strong>{t.gpuUsage === -1 ? 'N/A' : `${t.gpuUsage.toFixed(1)}%`}</strong></div>
             </div>
-
             <div className="vsd-tech-card">
                 <h3>База данных</h3>
                 <div className="vsd-tech-row"><span>Статус</span><span className={`vsd-badge ${t.dbConnected ? 'good' : 'bad'}`}>{t.dbConnected ? 'Подключена' : 'Отключена'}</span></div>
                 <div className="vsd-tech-row"><span>Замедление</span><span className={`vsd-badge ${t.dbIsSlow ? 'warn' : 'good'}`}>{t.dbIsSlow ? 'Есть' : 'Нет'}</span></div>
                 {t.dbLastError && <div className="error-text">{t.dbLastError}</div>}
             </div>
-
             <div className="vsd-tech-card">
                 <h3>Диски и Архив</h3>
                 <div className="vsd-tech-row"><span>Ошибки</span><strong className={t.disksErrorCount > 0 ? 'text-danger' : ''}>{t.disksErrorCount}</strong></div>
@@ -156,7 +170,6 @@ function TechDetailsTab({ t }: { t: ServerHealth | undefined }) {
                 <div className="vsd-tech-row"><span>Резервный</span><strong>{t.disksStatSubsDays.toFixed(1)} дн.</strong></div>
                 {t.disksLastError && <div className="error-text">{t.disksLastError}</div>}
             </div>
-
             <div className="vsd-tech-card">
                 <h3>Службы и Сеть</h3>
                 <div className="vsd-tech-row"><span>Скрипты</span><strong className={t.scriptsOk < t.scriptsTotal ? 'text-warn' : ''}>{t.scriptsOk} / {t.scriptsTotal}</strong></div>
@@ -167,29 +180,42 @@ function TechDetailsTab({ t }: { t: ServerHealth | undefined }) {
     );
 }
 
-type Tab = 'tech' | 'cameras' | 'channels' | 'events';
+type Tab = 'tech' | 'cameras' | 'channels' | 'events' | 'trassir-system' | 'trassir-raw' | 'ingest-log';
 
 // --- Главный компонент ---
 export function VideoServerDetailsPage() {
     const { serverId = '' } = useParams();
     const location = useLocation();
-    const navigation = location.state as { displayName?: string; serverData?: any; registry?: unknown } | null;
+    const navigation = location.state as {
+        displayName?: string;
+        serverData?: any;
+        registry?: unknown;
+        defaultTab?: Tab;
+        cameraFilter?: string;
+        defaultCameraStatus?: string;
+    } | null;
+
     const serverName = navigation?.displayName || 'Видеосервер';
     const description = navigation?.serverData?.description || 'Описание отсутствует';
 
-    const [activeTab, setActiveTab] = useState<Tab>('tech');
-    const [cameraFilter, setCameraFilter] = useState<string | undefined>(undefined);
+    const [activeTab, setActiveTab] = useState<Tab>(navigation?.defaultTab || 'tech');
+    const [cameraFilter, setCameraFilter] = useState<string | undefined>(navigation?.cameraFilter);
     const [infoCollapsed, setInfoCollapsed] = useState(false);
 
+    // Синхронизация при переходе
     useEffect(() => {
-        setActiveTab('tech');
-        setCameraFilter(undefined);
+        if (navigation?.defaultTab) {
+            setActiveTab(navigation.defaultTab);
+            setCameraFilter(navigation.cameraFilter);
+        } else {
+            setActiveTab('tech');
+            setCameraFilter(undefined);
+        }
         setInfoCollapsed(false);
-    }, [serverId]);
+    }, [serverId, navigation?.defaultTab, navigation?.cameraFilter]);
 
     const { user } = useAuthContext();
 
-    // Запрос реального здоровья сервера
     const healthQuery = useQuery({
         queryKey: ['vms-health', serverId],
         queryFn: ({ signal }) => getServerHealth(serverId, signal),
@@ -198,6 +224,11 @@ export function VideoServerDetailsPage() {
     });
 
     const t = healthQuery.data;
+
+    const showCameraEvents = (camId: string) => {
+        setCameraFilter(camId);
+        setActiveTab('events');
+    };
 
     return (
         <><Header />
@@ -266,13 +297,19 @@ export function VideoServerDetailsPage() {
                             <button className={activeTab === 'cameras' ? 'active' : ''} onClick={() => setActiveTab('cameras')}>Камеры</button>
                             <button className={activeTab === 'channels' ? 'active' : ''} onClick={() => setActiveTab('channels')}>Каналы</button>
                             <button className={activeTab === 'events' ? 'active' : ''} onClick={() => setActiveTab('events')}>События</button>
+                            <button className={activeTab === 'trassir-system' ? 'active' : ''} onClick={() => setActiveTab('trassir-system')}>Системные события</button>
+                            <button className={activeTab === 'trassir-raw' ? 'active' : ''} onClick={() => setActiveTab('trassir-raw')}>Сырые (Ingest)</button>
+                            <button className={activeTab === 'ingest-log' ? 'active' : ''} onClick={() => setActiveTab('ingest-log')}>Журнал (Ingest)</button>
                         </div>
 
                         <div className="vsd-tab-content">
                             {activeTab === 'tech' && <TechDetailsTab t={t} />}
-                            {activeTab === 'cameras' && <CamerasTab serverId={serverId} onShowEvents={(camId) => { setCameraFilter(camId); setActiveTab('events'); }} />}
+                            {activeTab === 'cameras' && <CamerasTab serverId={serverId} onShowEvents={showCameraEvents} initialStatusFilter={navigation?.defaultCameraStatus} />}
                             {activeTab === 'channels' && <ChannelsTab serverId={serverId} />}
                             {activeTab === 'events' && <EventsTab serverId={serverId} cameraId={cameraFilter} onClearCamera={() => setCameraFilter(undefined)} />}
+                            {activeTab === 'trassir-system' && <TrassirSystemEventsTab serverId={serverId} onShowEvents={showCameraEvents} />}
+                            {activeTab === 'trassir-raw' && <TrassirRawEventsTab serverId={serverId} />}
+                            {activeTab === 'ingest-log' && <TrassirIngestLogTab serverId={serverId} />}
                         </div>
                     </div>
 
@@ -282,11 +319,13 @@ export function VideoServerDetailsPage() {
 }
 
 // --- ВКЛАДКА: КАМЕРЫ ---
-function CamerasTab({ serverId, onShowEvents }: { serverId: string; onShowEvents: (id: string) => void }) {
+function CamerasTab({ serverId, onShowEvents, initialStatusFilter }: { serverId: string; onShowEvents: (id: string) => void; initialStatusFilter?: string }) {
     const { user } = useAuthContext();
     const [search, setSearch] = useState('');
     const debouncedSearch = useDebounce(search, 300);
-    const [statusFilter, setStatusFilter] = useState<string>('');
+
+    // Инициализируем фильтр статуса значением из пропса (если пришел)
+    const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || '');
 
     const [params, setParams] = useState<VideoCameraParams>({ videoServerId: serverId, page: 0, size: 15, sort: 'name,ASC' });
 
@@ -426,29 +465,73 @@ function ChannelsTab({ serverId }: { serverId: string }) {
 // --- ВКЛАДКА: СОБЫТИЯ ---
 function EventsTab({ serverId, cameraId, onClearCamera }: { serverId: string; cameraId?: string; onClearCamera: () => void }) {
     const { user } = useAuthContext();
-    const [params, setParams] = useState<VideoEventParams>({ videoServerId: serverId, page: 0, size: 15, sort: 'occurredAt,desc' });
 
-    useEffect(() => { setParams(p => ({ ...p, page: 0, cameraId })); }, [cameraId]);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cameraId || '');
+
+    const resolveCamQuery = useQuery({
+        queryKey: ['resolve-camera', serverId, cameraId],
+        queryFn: () => listVideoCameras({ videoServerId: serverId, q: cameraId, page: 0, size: 1, sort: 'id' }),
+        enabled: !!serverId && !!cameraId && !isUuid,
+        retry: false,
+    });
+
+    const resolvedCameraId = isUuid ? cameraId : resolveCamQuery.data?.content[0]?.id;
+    const resolving = !isUuid && resolveCamQuery.isPending;
+
+    const [searchQ, setSearchQ] = useState('');
+    const [severity, setSeverity] = useState('');
+
+    const [params, setParams] = useState<VideoEventParams>({ videoServerId: serverId, page: 0, size: 100, sort: 'occurredAt,desc' });
+
+    useEffect(() => {
+        setParams(p => ({ ...p, page: 0, cameraId: resolvedCameraId }));
+    }, [resolvedCameraId]);
 
     const query = useQuery({
         queryKey: ['video-server-events', user?.id, params],
         queryFn: ({ signal }) => listVideoEvents(params, signal),
-        enabled: !!user && !!serverId, retry: false,
+        enabled: !!user && !!serverId && !!resolvedCameraId,
+        retry: false,
     });
     const data = query.isError ? undefined : query.data;
+
+    const filteredData = data?.content.filter(e => {
+        const matchQ = !searchQ ||
+            (e.cameraId && e.cameraId.toLowerCase().includes(searchQ.toLowerCase())) ||
+            (e.eventType && e.eventType.toLowerCase().includes(searchQ.toLowerCase())) ||
+            (e.eventId && e.eventId.toLowerCase().includes(searchQ.toLowerCase()));
+        const matchSeverity = !severity || e.severity === severity;
+        return matchQ && matchSeverity;
+    }) || [];
 
     return (
         <div className="vsd-panel">
             <div className="vsd-toolbar">
-                {cameraId ? (
-                    <div className="vsd-active-filter">
-                        <span>Фильтр по камере: <strong>{cameraId}</strong></span>
-                        <button type="button" className="vsd-link" onClick={onClearCamera}>Сбросить</button>
-                    </div>
-                ) : <div />}
-                <button type="button" className="vsd-link" disabled={query.isFetching} onClick={() => void query.refetch()}>Обновить</button>
+                <div className="vsd-toolbar-filters">
+                    {cameraId && (
+                        <div className="vsd-active-filter" style={{ marginRight: 8 }}>
+                            <span>Камера: <strong>{resolving ? 'Поиск...' : (resolvedCameraId ? resolvedCameraId.slice(0, 8) + '...' : 'Не найдена')}</strong></span>
+                            <button type="button" className="vsd-link" onClick={onClearCamera}>Сбросить</button>
+                        </div>
+                    )}
+                    <input
+                        type="search"
+                        className="form-control vsd-search-input"
+                        placeholder="Поиск по объекту..."
+                        value={searchQ}
+                        onChange={e => setSearchQ(e.target.value)}
+                    />
+                    <select className="form-control" value={severity} onChange={e => setSeverity(e.target.value)}>
+                        <option value="">Все критичности</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="CRITICAL">CRITICAL</option>
+                    </select>
+                </div>
+                <button type="button" className="vsd-link" disabled={query.isFetching || resolving} onClick={() => void query.refetch()}>Обновить</button>
             </div>
             {query.isError && <div className="vms-error" role="alert">{videoError(query.error)}</div>}
+            {!isUuid && resolveCamQuery.isSuccess && !resolvedCameraId && <div className="vms-error" role="alert">Камера "{cameraId}" не найдена в базе Pulse.</div>}
 
             <div className="table-responsive">
                 <table className="vms-table">
@@ -460,9 +543,9 @@ function EventsTab({ serverId, cameraId, onClearCamera }: { serverId: string; ca
                         <th>Источник</th>
                     </tr></thead>
                     <tbody>
-                    {!data && !query.isError && <tr><td colSpan={5} className="text-center">Загрузка…</td></tr>}
-                    {data && !data.content.length && <tr><td colSpan={5} className="text-center">События не найдены.</td></tr>}
-                    {data?.content.map((e) => (
+                    {(resolving || (!data && !query.isError)) && <tr><td colSpan={5} className="text-center">Загрузка…</td></tr>}
+                    {!resolving && data && !filteredData.length && <tr><td colSpan={5} className="text-center">События не найдены.</td></tr>}
+                    {!resolving && filteredData.map((e) => (
                         <tr key={e.eventId}>
                             <td><time dateTime={e.occurredAt}>{videoTime(e.occurredAt)}</time></td>
                             <td>
@@ -476,6 +559,323 @@ function EventsTab({ serverId, cameraId, onClearCamera }: { serverId: string; ca
                             </td>
                             <td><span className="vsd-external-id">{e.cameraId ?? '—'}</span></td>
                             <td>{e.source ?? '—'}</td>
+                        </tr>
+                    ))}
+                    </tbody>
+                </table>
+            </div>
+            <VideoPager data={data} size={params.size} fetching={query.isFetching} onPage={(page) => setParams(p => ({ ...p, page }))} onSize={(size) => setParams(p => ({ ...p, page: 0, size }))} />
+        </div>
+    );
+}
+
+// --- ВКЛАДКА: TRASSIR СИСТЕМНЫЕ СОБЫТИЯ ---
+function TrassirSystemEventsTab({ serverId, onShowEvents }: { serverId: string; onShowEvents: (id: string) => void }) {
+    const { user } = useAuthContext();
+
+    const [searchQ, setSearchQ] = useState('');
+    const debouncedSearchQ = useDebounce(searchQ, 300);
+    const [severity, setSeverity] = useState('');
+
+    const [params, setParams] = useState<TrassirSystemEventParams>({ serverId, page: 0, size: 15 });
+    const [loadingCam, setLoadingCam] = useState(false);
+
+    useEffect(() => {
+        setParams(p => ({
+            ...p,
+            page: 0,
+            serverId,
+            q: debouncedSearchQ || undefined,
+            severity: severity || undefined
+        }));
+    }, [serverId, debouncedSearchQ, severity]);
+
+    const query = useQuery({
+        queryKey: ['vms-trassir-system', user?.id, params],
+        queryFn: ({ signal }) => listTrassirSystemEvents(params, signal),
+        enabled: !!user && !!serverId, retry: false,
+    });
+    const data = query.isError ? undefined : query.data;
+
+    const handleLinkClick = async (objName: string | null, objId: string | null) => {
+        const searchQuery = objName || objId;
+        if (!searchQuery) return;
+
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchQuery);
+        if (isUuid) {
+            onShowEvents(searchQuery);
+            return;
+        }
+
+        setLoadingCam(true);
+        try {
+            const res = await listVideoCameras({ videoServerId: serverId, q: searchQuery, page: 0, size: 1, sort: 'id' });
+            if (res.content.length > 0) {
+                onShowEvents(res.content[0].id);
+            } else {
+                toast.error('Камера не найдена в базе Pulse');
+            }
+        } catch (e) {
+            toast.error('Ошибка поиска камеры');
+        } finally {
+            setLoadingCam(false);
+        }
+    };
+
+    return (
+        <div className="vsd-panel">
+            <div className="vsd-toolbar">
+                <div className="vsd-toolbar-filters">
+                    <input type="search" className="form-control vsd-search-input" placeholder="Поиск по объекту..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+                    <select className="form-control" value={severity} onChange={e => setSeverity(e.target.value)}>
+                        <option value="">Все критичности</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="CRITICAL">CRITICAL</option>
+                    </select>
+                </div>
+                <button type="button" className="vsd-link" disabled={query.isFetching} onClick={() => void query.refetch()}>Обновить</button>
+            </div>
+            {query.isError && <div className="vms-error" role="alert">{videoError(query.error)}</div>}
+            <div className="table-responsive">
+                <table className="vms-table">
+                    <thead><tr>
+                        <th>Время</th><th>Тип</th><th>Критичность</th><th>Объект</th>
+                    </tr></thead>
+                    <tbody>
+                    {!data && !query.isError && <tr><td colSpan={4} className="text-center">Загрузка…</td></tr>}
+                    {data && !data.content.length && <tr><td colSpan={4} className="text-center">Системные события не найдены.</td></tr>}
+                    {data?.content.map(e => {
+                        const objectName = e.objectName || e.objectId;
+                        const canLink = !!e.objectId;
+
+                        return (
+                            <tr key={e.id}>
+                                <td><time dateTime={e.occurredAt || e.observedAt || e.createdAt || ''}>{getEventTime(e)}</time></td>
+                                <td><strong>{e.eventType || '—'}</strong><small className="text-muted d-block">{e.eventVersion}</small></td>
+                                <td><span className={`vsd-badge ${e.severity === 'CRITICAL' ? 'bad' : e.severity === 'WARNING' ? 'warn' : 'good'}`}>{e.severity || '—'}</span></td>
+                                <td>
+                                    {canLink ? (
+                                        <button
+                                            type="button"
+                                            className="vsd-link"
+                                            title="Показать события этой камеры"
+                                            onClick={() => handleLinkClick(e.objectName, e.objectId)}
+                                            disabled={loadingCam}
+                                        >
+                                            {loadingCam ? 'Поиск...' : (objectName || '—')}
+                                        </button>
+                                    ) : (
+                                        <span>{objectName || '—'}</span>
+                                    )}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                    </tbody>
+                </table>
+            </div>
+            <VideoPager data={data} size={params.size} fetching={query.isFetching} onPage={(page) => setParams(p => ({ ...p, page }))} onSize={(size) => setParams(p => ({ ...p, page: 0, size }))} />
+        </div>
+    );
+}
+
+// --- ВКЛАДКА: TRASSIR СЫРЫЕ СОБЫТИЯ ---
+function TrassirRawEventsTab({ serverId }: { serverId: string }) {
+    const { user } = useAuthContext();
+    const qc = useQueryClient();
+
+    const [eventType, setEventType] = useState('');
+    const debouncedEventType = useDebounce(eventType, 300);
+    const [status, setStatus] = useState('');
+
+    const [params, setParams] = useState<TrassirEventParams>({ serverId, page: 0, size: 15 });
+
+    useEffect(() => {
+        setParams(p => ({
+            ...p,
+            page: 0,
+            serverId,
+            eventType: debouncedEventType || undefined,
+            status: status || undefined
+        }));
+    }, [serverId, debouncedEventType, status]);
+
+    const query = useQuery({
+        queryKey: ['vms-trassir-raw', user?.id, params],
+        queryFn: ({ signal }) => listTrassirEvents(params, signal),
+        enabled: !!user && !!serverId, retry: false,
+    });
+    const data = query.isError ? undefined : query.data;
+
+    const retryMutation = useMutation({
+        mutationFn: retryTrassirEvent,
+        onSuccess: () => {
+            toast.success('Событие отправлено на повторную обработку');
+            qc.invalidateQueries({ queryKey: ['vms-trassir-raw'] });
+        },
+        onError: (err) => {
+            const msg = isAxiosError(err) && err.response?.data?.message ? err.response.data.message : 'Ошибка при попытке повтора';
+            toast.error(msg);
+        }
+    });
+
+    return (
+        <div className="vsd-panel">
+            <div className="vsd-toolbar">
+                <div className="vsd-toolbar-filters">
+                    <input type="search" className="form-control vsd-search-input" placeholder="Тип события..." value={eventType} onChange={e => setEventType(e.target.value)} />
+                    <select className="form-control" value={status} onChange={e => setStatus(e.target.value)}>
+                        <option value="">Все статусы</option>
+                        <option value="PROCESSED">PROCESSED</option>
+                        <option value="FAILED">FAILED</option>
+                        <option value="DEAD_LETTER">DEAD_LETTER</option>
+                        <option value="PENDING">PENDING</option>
+                    </select>
+                </div>
+                <button type="button" className="vsd-link" disabled={query.isFetching} onClick={() => void query.refetch()}>Обновить</button>
+            </div>
+            {query.isError && <div className="vms-error" role="alert">{videoError(query.error)}</div>}
+            <div className="table-responsive">
+                <table className="vms-table">
+                    <thead><tr>
+                        <th>Время</th><th>Тип</th><th>Статус</th><th>Ошибка</th><th></th>
+                    </tr></thead>
+                    <tbody>
+                    {!data && !query.isError && <tr><td colSpan={5} className="text-center">Загрузка…</td></tr>}
+                    {data && !data.content.length && <tr><td colSpan={5} className="text-center">Сырые события не найдены.</td></tr>}
+                    {data?.content.map(e => {
+                        const canRetry = e.status === 'FAILED' || e.status === 'DEAD_LETTER';
+                        return (
+                            <tr key={e.id}>
+                                <td><time dateTime={e.occurredAt || e.observedAt || e.createdAt || ''}>{getEventTime(e)}</time></td>
+                                <td><strong>{e.eventType || '—'}</strong></td>
+                                <td>
+                                        <span className={`vsd-badge ${e.status === 'PROCESSED' ? 'good' : e.status === 'FAILED' ? 'bad' : 'warn'}`}>
+                                            {e.status || 'UNKNOWN'}
+                                        </span>
+                                    {e.retryCount > 0 && <small className="text-muted d-block" style={{marginTop: 4}}>Retries: {e.retryCount}</small>}
+                                </td>
+                                <td><span className="text-danger" style={{fontSize: 11, wordBreak: 'break-all'}}>{e.lastError || '—'}</span></td>
+                                <td style={{textAlign: 'right'}}>
+                                    {canRetry && (
+                                        <button
+                                            className="vsd-link"
+                                            disabled={retryMutation.isPending}
+                                            onClick={() => retryMutation.mutate(e.id)}
+                                        >
+                                            Повторить
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                    </tbody>
+                </table>
+            </div>
+            <VideoPager data={data} size={params.size} fetching={query.isFetching} onPage={(page) => setParams(p => ({ ...p, page }))} onSize={(size) => setParams(p => ({ ...p, page: 0, size }))} />
+        </div>
+    );
+}
+
+// --- ВКЛАДКА: TRASSIR ЖУРНАЛ (INGEST LOG) ---
+function TrassirIngestLogTab({ serverId }: { serverId: string }) {
+    const { user } = useAuthContext();
+
+    const [httpStatus, setHttpStatus] = useState('');
+    const [responseCode, setResponseCode] = useState('');
+
+    const [params, setParams] = useState<TrassirIngestLogParams>({ serverId, page: 0, size: 15 });
+
+    useEffect(() => {
+        setParams(p => ({
+            ...p,
+            page: 0,
+            serverId,
+            httpStatus: httpStatus ? Number(httpStatus) : undefined,
+            responseCode: responseCode.trim() || undefined
+        }));
+    }, [serverId, httpStatus, responseCode]);
+
+    const query = useQuery({
+        queryKey: ['vms-trassir-ingest-log', user?.id, params],
+        queryFn: ({ signal }) => listTrassirIngestLogs(params, signal),
+        enabled: !!user && !!serverId, retry: false,
+    });
+    const data = query.isError ? undefined : query.data;
+
+    return (
+        <div className="vsd-panel">
+            <div className="vsd-toolbar">
+                <div className="vsd-toolbar-filters">
+                    <select className="form-control" value={httpStatus} onChange={e => setHttpStatus(e.target.value)}>
+                        <option value="">Все HTTP статусы</option>
+                        <option value="200">200 OK</option>
+                        <option value="400">400 Bad Request</option>
+                        <option value="401">401 Unauthorized</option>
+                        <option value="403">403 Forbidden</option>
+                        <option value="404">404 Not Found</option>
+                        <option value="500">500 Internal Server Error</option>
+                    </select>
+                    <input
+                        type="search"
+                        className="form-control vsd-search-input"
+                        placeholder="Код ответа (responseCode)..."
+                        value={responseCode}
+                        onChange={e => setResponseCode(e.target.value)}
+                    />
+                </div>
+                <button type="button" className="vsd-link" disabled={query.isFetching} onClick={() => void query.refetch()}>Обновить</button>
+            </div>
+            {query.isError && <div className="vms-error" role="alert">{videoError(query.error)}</div>}
+
+            <div className="table-responsive">
+                <table className="vms-table">
+                    <thead><tr>
+                        <th>Время получения</th>
+                        <th>HTTP Статус</th>
+                        <th>Код ответа</th>
+                        <th>Длительность</th>
+                        <th>Детали</th>
+                    </tr></thead>
+                    <tbody>
+                    {!data && !query.isError && <tr><td colSpan={5} className="text-center">Загрузка…</td></tr>}
+                    {data && !data.content.length && <tr><td colSpan={5} className="text-center">Записей не найдено.</td></tr>}
+                    {data?.content.map(log => (
+                        <tr key={log.id}>
+                            <td>
+                                <time dateTime={log.receivedAt || ''}>{getEventTime(log)}</time>
+                                {log.batchId && <small className="text-muted d-block">Batch: {log.batchId.split('-')[0]}...</small>}
+                            </td>
+                            <td>
+                                    <span className={`vsd-badge ${log.httpStatus && log.httpStatus >= 200 && log.httpStatus < 300 ? 'good' : log.httpStatus && log.httpStatus >= 500 ? 'bad' : 'warn'}`}>
+                                        {log.httpStatus || '—'}
+                                    </span>
+                            </td>
+                            <td><code>{log.responseCode || '—'}</code></td>
+                            <td><span className="text-muted">{log.durationMs !== null ? `${log.durationMs} мс` : '—'}</span></td>
+                            <td>
+                                <details>
+                                    <summary className="vsd-link">Открыть</summary>
+                                    <div style={{ marginTop: 8, fontSize: 11 }}>
+                                        {log.requestUri && <div><strong>URI:</strong> {log.requestUri}</div>}
+                                        {log.errorMessage && <div className="text-danger" style={{ marginTop: 4 }}>{log.errorMessage}</div>}
+                                        {log.requestBody && (
+                                            <div style={{ marginTop: 8 }}>
+                                                <strong>Тело запроса:</strong>
+                                                <pre style={{ maxHeight: 100, overflowY: 'auto', padding: 4, background: 'var(--surface-soft)' }}>{log.requestBody}</pre>
+                                            </div>
+                                        )}
+                                        {log.responseBody && (
+                                            <div style={{ marginTop: 8 }}>
+                                                <strong>Ответ:</strong>
+                                                <pre style={{ maxHeight: 100, overflowY: 'auto', padding: 4, background: 'var(--surface-soft)' }}>{log.responseBody}</pre>
+                                            </div>
+                                        )}
+                                    </div>
+                                </details>
+                            </td>
                         </tr>
                     ))}
                     </tbody>

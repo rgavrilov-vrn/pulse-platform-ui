@@ -1,83 +1,220 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { useAuthContext } from '../auth/AuthContext';
-import { listVideoServers, type VideoServerParams } from '../api/videoServers';
+import {
+    listVideoServers,
+    getServerHealth,
+    type VideoServerParams
+} from '../api/videoServers';
+import { listFacilities } from '../api/refs';
 import { VideoServerCreateDialog } from '../components/VideoServerCreateDialog';
-import { validUuid, VideoPager, videoError } from '../components/VideoServerWidgets';
+import { VideoPager, videoError } from '../components/VideoServerWidgets';
+import { useDebounce } from '../hooks/useDebounce';
 import './VideoServersPage.css';
+import './VideoServerDetailsPage.css';
 
-type Filters = Record<'search' | 'source' | 'objectId' | 'zoneId' | 'status' | 'active' | 'sort', string>;
-const blank = (): Filters => ({ search: '', source: '', objectId: '', zoneId: '', status: '', active: '', sort: 'name,asc' });
+// Компонент для точечной загрузки количества камер
+function ServerCameraCount({ serverId }: { serverId: string }) {
+    const { user } = useAuthContext();
+    const query = useQuery({
+        queryKey: ['vms-health', serverId],
+        queryFn: ({ signal }) => getServerHealth(serverId, signal),
+        enabled: !!user && !!serverId,
+        retry: false,
+        staleTime: 60 * 1000,
+    });
+
+    if (query.isPending) return <span className="text-muted">…</span>;
+    if (query.isError || !query.data) return <span className="text-muted">—</span>;
+
+    const { ipDevicesConnected, ipDevicesTotal } = query.data;
+    const isWarning = ipDevicesConnected < ipDevicesTotal;
+
+    return (
+        <Link
+            to={`/video-servers/${encodeURIComponent(serverId)}`}
+            state={{ defaultTab: 'cameras', defaultCameraStatus: 'OFFLINE' }}
+            className="vms-text-link"
+            title="Показать камеры не в сети"
+        >
+            <span className={isWarning ? 'text-warn' : ''} style={{ fontSize: '11px', fontWeight: 600 }}>
+                {ipDevicesConnected}
+            </span>
+            <span className="text-muted" style={{ fontSize: '11px', margin: '0 4px' }}>/</span>
+            <span style={{ fontSize: '13px', fontWeight: 500 }}>
+                {ipDevicesTotal}
+            </span>
+        </Link>
+    );
+}
+
 export function VideoServersPage() {
     const { user } = useAuthContext();
     const location = useLocation();
-    const restored = location.state as { registry?: { draft: Filters; params: VideoServerParams } } | null;
-    const [draft, setDraft] = useState<Filters>(() => restored?.registry?.draft ?? blank());
-    const [params, setParams] = useState<VideoServerParams>(() => restored?.registry?.params ?? { page: 0, size: 25, sort: 'name,asc' });
-    const [error, setError] = useState('');
+    const restored = location.state as { registry?: { draft: any; params: VideoServerParams } } | null;
+
+    // Фильтры (живые)
+    const [search, setSearch] = useState(restored?.registry?.draft?.search ?? '');
+    const debouncedSearch = useDebounce(search, 300);
+
+    const [source, setSource] = useState(restored?.registry?.draft?.source ?? '');
+    const debouncedSource = useDebounce(source, 300);
+
+    const [status, setStatus] = useState(restored?.registry?.draft?.status ?? '');
+    const [active, setActive] = useState(restored?.registry?.draft?.active ?? '');
+
     const [creating, setCreating] = useState(false);
-    const query = useQuery({ queryKey: ['video-servers', user?.id, params], queryFn: ({ signal }) => listVideoServers(params, signal), enabled: !!user, retry: false });
-    const data = query.isError ? undefined : query.data;
+
+    // Параметры пагинации и запроса
+    const [params, setParams] = useState<VideoServerParams>(() => restored?.registry?.params ?? { page: 0, size: 25, sort: 'name,asc' });
+
+    // Сброс страницы при смене фильтров
     useEffect(() => {
-        if (!query.data || query.isFetching || query.isError) return;
-        const last = Math.max(0, query.data.totalPages - 1);
-        if (params.page > last) setParams((p) => ({ ...p, page: last }));
-    }, [query.data, query.isFetching, query.isError, params.page]);
-    function apply(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-        for (const key of ['objectId', 'zoneId'] as const) {
-            if (draft[key].trim() && !validUuid(draft[key].trim())) { setError(`${key}: укажите корректный UUID.`); return; }
-        }
-        setError('');
-        setParams({ page: 0, size: params.size, sort: draft.sort,
-            search: draft.search.trim() || undefined, source: draft.source.trim() || undefined,
-            objectId: draft.objectId.trim() || undefined, zoneId: draft.zoneId.trim() || undefined,
-            status: draft.status ? draft.status as VideoServerParams['status'] : undefined,
-            isActive: draft.active === '' ? undefined : draft.active === 'true' });
-    }
-    function reset() { setDraft(blank()); setError(''); setParams((p) => ({ page: 0, size: p.size, sort: 'name,asc' })); }
-    const registry = { draft, params };
-    return <><Header /><div className="app-body"><Sidebar /><main className="workspace vms-workspace">
-        <div className="page-heading"><div><div className="breadcrumb-line">Ситуационный центр <span>/</span> Видеосерверы</div><h1>Видеосерверы</h1></div>
-            <div className="vms-heading-actions"><Link className="btn btn-outline-secondary" to="/video-servers/demo" state={{ registry }}>Демо карточки</Link>
-                <button className="btn btn-outline-secondary" type="button" disabled={query.isFetching} onClick={() => void query.refetch()}>Обновить</button>
-                <button className="btn btn-primary" type="button" onClick={() => setCreating(true)}>+ Новый видеосервер</button></div></div>
-        <section className="panel vms-panel" aria-label="Реестр видеосерверов">
-            <form className="vms-filters" onSubmit={apply}>
-                <label>Поиск по названию<input type="search" className="form-control" placeholder="Название видеосервера" value={draft.search} onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))} /></label>
-                <div className="vms-filter-grid">
-                    <label>Источник (точный код)<input className="form-control" value={draft.source} onChange={(e) => setDraft((d) => ({ ...d, source: e.target.value }))} /></label>
-                    <label>Статус<select className="form-control" value={draft.status} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}>
-                        <option value="">Все</option><option value="ONLINE">В сети (ONLINE)</option><option value="OFFLINE">Не в сети (OFFLINE)</option><option value="UNKNOWN">Неизвестно (UNKNOWN)</option></select></label>
-                    <label>Активность<select className="form-control" value={draft.active} onChange={(e) => setDraft((d) => ({ ...d, active: e.target.value }))}>
-                        <option value="">Все</option><option value="true">Активные</option><option value="false">Неактивные</option></select></label>
-                    <label>Сортировка<select className="form-control" value={draft.sort} onChange={(e) => setDraft((d) => ({ ...d, sort: e.target.value }))}>
-                        <option value="name,asc">Название: А–Я</option><option value="name,desc">Название: Я–А</option><option value="createdAt,desc">Сначала новые</option>
-                        <option value="createdAt,asc">Сначала старые</option><option value="status,asc">По статусу</option><option value="source,asc">По источнику</option></select></label>
-                    <label>ID объекта (UUID)<input className="form-control" value={draft.objectId} onChange={(e) => setDraft((d) => ({ ...d, objectId: e.target.value }))} /></label>
-                    <label>ID зоны (UUID)<input className="form-control" value={draft.zoneId} onChange={(e) => setDraft((d) => ({ ...d, zoneId: e.target.value }))} /></label>
-                </div><div className="vms-actions"><button type="submit" className="btn btn-primary">Применить</button><button type="button" className="btn btn-outline-secondary" onClick={reset}>Сбросить</button>
-                    <span>Поиск и фильтры — по всему реестру. Карточка сервера пока в демо-режиме.</span></div>
-                {error && <p className="vms-error" role="alert">{error}</p>}
-            </form>
-            {query.isError && <div className="vms-error vms-message" role="alert">{videoError(query.error)} <button className="btn btn-outline-secondary" type="button" disabled={query.isFetching} onClick={() => void query.refetch()}>Повторить</button></div>}
-            <div className="vms-scroll" aria-busy={query.isFetching}><table className="vms-table"><caption>Нажмите на название для перехода в демонстрационную карточку.</caption>
-                <thead><tr><th scope="col">Название / источник</th><th scope="col">Адрес</th><th scope="col">Статус / активность</th><th scope="col">Объект / зона</th><th scope="col">Описание</th></tr></thead>
-                <tbody>{!data && !query.isError && <tr><td colSpan={5}>Загрузка…</td></tr>}
-                    {data && !data.content.length && <tr><td colSpan={5}>Видеосерверы по выбранным условиям не найдены.</td></tr>}
-                    {data?.content.map((server) => <tr key={server.id}>
-                        <td><Link className="vms-server-link" style={{ color: 'var(--accent)', fontWeight: 600 }} to={`/video-servers/${encodeURIComponent(server.id)}`} state={{ registry, displayName: server.name }}>{server.name ?? 'Без названия'}</Link>
-                            <span>{server.source ?? '—'}</span><small>Внешний ID: {server.externalId ?? '—'}</small></td>
-                        <td><span>{server.host ?? '—'}</span><small>{server.baseUrl ?? '—'}</small></td>
-                        <td><span className={`vms-status ${server.status === 'ONLINE' ? 'online' : server.status === 'OFFLINE' ? 'offline' : 'unknown'}`}>
-                            {server.status === 'ONLINE' ? 'В сети' : server.status === 'OFFLINE' ? 'Не в сети' : server.status === 'UNKNOWN' ? 'Неизвестно' : server.status ?? 'Не указан'}</span><small>{server.isActive ? 'Активен' : 'Неактивен'}</small></td>
-                        <td><small>Объект</small><code>{server.objectId ?? '—'}</code><small>Зона</small><code>{server.zoneId ?? '—'}</code></td><td>{server.description ?? '—'}</td>
-                    </tr>)}
-                </tbody></table></div>
-            <VideoPager data={data} size={params.size} fetching={query.isFetching} onPage={(page) => setParams((p) => ({ ...p, page }))} onSize={(size) => setParams((p) => ({ ...p, page: 0, size }))} />
-        </section>
-    </main></div>{creating && <VideoServerCreateDialog onClose={() => setCreating(false)} onCreated={() => { setCreating(false); reset(); }} />}</>;
+        setParams(p => ({
+            ...p,
+            page: 0,
+            search: debouncedSearch || undefined,
+            source: debouncedSource || undefined,
+            status: status || undefined,
+            isActive: active === '' ? undefined : active === 'true'
+        }));
+    }, [debouncedSearch, debouncedSource, status, active]);
+
+    // Запрос видеосерверов
+    const query = useQuery({
+        queryKey: ['video-servers', user?.id, params],
+        queryFn: ({ signal }) => listVideoServers(params, signal),
+        enabled: !!user,
+        retry: false
+    });
+    const data = query.isError ? undefined : query.data;
+
+    // Запрос объектов для маппинга ID -> Название
+    const facilitiesQuery = useQuery({
+        queryKey: ['facilities-ref'],
+        queryFn: ({ signal }) => listFacilities(signal),
+        enabled: !!user,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    // Словарь для быстрого поиска
+    const facilitiesMap = new Map(facilitiesQuery.data?.content.map(f => [f.id, f.name]) ?? []);
+
+    return (
+        <><Header />
+            <div className="app-body vsd-app">
+                <Sidebar />
+                <main className="workspace vsd-workspace">
+                    <div className="page-heading">
+                        <div>
+                            <div className="breadcrumb-line">Ситуационный центр <span>/</span> Видеосерверы</div>
+                            <h1>Видеосерверы</h1>
+                        </div>
+                        <div className="vms-heading-actions">
+                            <button className="btn btn-primary" type="button" onClick={() => setCreating(true)}>+ Новый видеосервер</button>
+                        </div>
+                    </div>
+
+                    <div className="vsd-main-panel" style={{ flex: 1, minHeight: 0 }}>
+                        <div className="vsd-tab-content">
+                            <div className="vsd-panel">
+                                <div className="vsd-toolbar">
+                                    <div className="vsd-toolbar-filters">
+                                        <input
+                                            type="search"
+                                            className="form-control vsd-search-input"
+                                            placeholder="Поиск по названию..."
+                                            value={search}
+                                            onChange={e => setSearch(e.target.value)}
+                                        />
+                                        <input
+                                            type="search"
+                                            className="form-control vsd-search-input"
+                                            placeholder="Источник (код)..."
+                                            value={source}
+                                            onChange={e => setSource(e.target.value)}
+                                        />
+                                        <select className="form-control" style={{ width: 160 }} value={status} onChange={e => setStatus(e.target.value)}>
+                                            <option value="">Все статусы</option>
+                                            <option value="ONLINE">В сети</option>
+                                            <option value="OFFLINE">Не в сети</option>
+                                            <option value="UNKNOWN">Неизвестно</option>
+                                        </select>
+                                        <select className="form-control" style={{ width: 160 }} value={active} onChange={e => setActive(e.target.value)}>
+                                            <option value="">Все активности</option>
+                                            <option value="true">Активные</option>
+                                            <option value="false">Неактивные</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {query.isError && <div className="vms-error" role="alert">{videoError(query.error)}</div>}
+
+                                <div className="table-responsive">
+                                    <table className="vms-table">
+                                        <thead><tr>
+                                            <th>Название</th>
+                                            <th>Объект</th>
+                                            <th>Статус</th>
+                                            <th>Камеры</th>
+                                            <th>Адрес</th>
+                                            <th>Описание</th>
+                                        </tr></thead>
+                                        <tbody>
+                                        {!data && !query.isError && <tr><td colSpan={6} className="text-center">Загрузка…</td></tr>}
+                                        {data && !data.content.length && <tr><td colSpan={6} className="text-center">Видеосерверы не найдены.</td></tr>}
+                                        {data?.content.map((server) => (
+                                            <tr key={server.id}>
+                                                <td>
+                                                    <Link
+                                                        to={`/video-servers/${encodeURIComponent(server.id)}`}
+                                                        state={{ registry: { params }, displayName: server.name }}
+                                                        className="vms-text-link"
+                                                        style={{ fontWeight: 600, color: 'var(--text)' }}
+                                                    >
+                                                        <span className={`vsd-status-dot ${server.isActive ? 'is-active' : 'is-inactive'}`} title={server.isActive ? 'Активен' : 'Неактивен'} />
+                                                        {server.name ?? 'Без названия'}
+                                                    </Link>
+                                                </td>
+                                                <td>
+                                                    <small className="text-muted d-block">
+                                                        {server.objectId ? (facilitiesMap.get(server.objectId) || server.objectId) : '—'}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <span className={`vsd-badge ${server.status === 'ONLINE' ? 'good' : server.status === 'OFFLINE' ? 'bad' : 'warn'}`}>
+                                                        {server.status === 'ONLINE' ? 'В сети' : server.status === 'OFFLINE' ? 'Не в сети' : 'Неизвестно'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <ServerCameraCount serverId={server.id} />
+                                                </td>
+                                                <td>
+                                                    <span className="vsd-external-id">{server.host ?? '—'}</span>
+                                                </td>
+                                                <td>{server.description ?? '—'}</td>
+                                            </tr>
+                                        ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <VideoPager
+                                    data={data}
+                                    size={params.size}
+                                    fetching={query.isFetching}
+                                    onPage={(page) => setParams(p => ({ ...p, page }))}
+                                    onSize={(size) => setParams(p => ({ ...p, page: 0, size }))}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+            {creating && <VideoServerCreateDialog onClose={() => setCreating(false)} onCreated={() => { setCreating(false); void query.refetch(); }} />}
+        </>
+    );
 }
